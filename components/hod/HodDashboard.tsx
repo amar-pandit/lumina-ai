@@ -6,6 +6,10 @@ import { getEscalationCandidates } from "@/lib/admin-analytics";
 import { DEMO_STATE_KEY, INITIAL_DEMO_STATE, getDemoRoster } from "@/lib/demo-model";
 import { HOD_DEPARTMENT } from "@/lib/hod-data";
 import { useDemoState } from "@/lib/use-demo-state";
+import { ReportExportButton } from "@/components/reports/ReportExportButton";
+import { calculateAttainment } from "@/lib/accreditation-engine";
+import { courses } from "@/lib/demo-data";
+import type { ReportDocument } from "@/lib/reports/types";
 
 const panel = "min-w-0 rounded-2xl border border-white/10 bg-[#111a1b]/90 p-5";
 
@@ -56,6 +60,41 @@ export function HodDashboard() {
       };
     });
   }, [departmentRoster]);
+  const riskReport: ReportDocument = {
+    type: "hod-risk",
+    title: "HOD Department Risk Report",
+    period: state.term,
+    filters: { Department: department },
+    columns: ["Student", "Course", "Faculty / Mentor", "Attendance", "Academic Score", "Risk Score", "Risk Level", "Risk Factors"],
+    rows: departmentRoster.map((student) => [student.name, student.course, student.mentor, `${student.attendance}%`, `${student.assessmentAverage}%`, student.risk.toFixed(1), student.status, student.riskDrivers.join(", ")]),
+  };
+  const accreditationReport: ReportDocument = {
+    type: "hod-accreditation",
+    title: "HOD Accreditation Report",
+    period: state.term,
+    filters: { Department: department, Cutoff: "50%" },
+    columns: ["Metric", "Department", "Numerator", "Denominator", "Percentage", "Reporting Period"],
+    rows: courses.map((course) => {
+      const scores = departmentRoster.map((student) => student.subjectMarks[course.name] ?? student.assessmentAverage);
+      const result = calculateAttainment([{ code: course.name, title: course.name, scores, targetCutoff: 50 }])[0];
+      const numerator = scores.filter((score) => score >= 50).length;
+      return [result.title, department, numerator, result.studentsAssessed, `${result.attainment}%`, state.term];
+    }),
+    summary: [["Department", department], ["Reporting Period", state.term]],
+  };
+  const interventionReport: ReportDocument = {
+    type: "hod-interventions",
+    title: "HOD Intervention and Escalation Report",
+    period: state.term,
+    filters: { Department: department },
+    columns: ["Student", "Course", "Risk Level", "Trigger", "Intervention", "Owner", "Status", "Escalation Level"],
+    rows: interventions.map((item) => {
+      const student = departmentRoster.find((entry) => entry.name === item.student);
+      const escalation = student ? state.escalationRecords[student.id] : undefined;
+      return [item.student, student?.course ?? "—", student?.status ?? "—", student?.issue ?? "—", item.type, item.mentor, item.status, escalation?.status ?? "None"];
+    }),
+    summary: [["Department Interventions", interventions.length], ["Active", activeInterventions], ["Open Escalations", escalations.length]],
+  };
 
   return (
     <div>
@@ -65,7 +104,20 @@ export function HodDashboard() {
           <h1 className="mt-1.5 text-2xl font-semibold text-white sm:text-[28px]">Department overview</h1>
           <p className="mt-1 text-sm text-zinc-400">Department-level attendance, academic performance, risk, and support activity.</p>
         </div>
-        <DemoControls />
+        <div className="flex flex-wrap items-center gap-3"><ReportExportButton report={{
+          type: "hod-department-summary",
+          title: "HOD Department Academic Report",
+          period: state.term,
+          filters: { Department: department },
+          columns: ["Department", "Course", "Students", "Average Attendance", "Average Academic Performance", "At Risk", "Critical", "Active Interventions"],
+          rows: courseSummary.map((item) => [
+            department, item.course, item.students, `${item.attendance.toFixed(1)}%`,
+            `${item.assessment.toFixed(1)}%`, item.atRisk,
+            departmentRoster.filter((student) => student.course === item.course && student.status === "Critical").length,
+            interventions.filter((intervention) => intervention.status === "Scheduled" && departmentRoster.some((student) => student.name === intervention.student && student.course === item.course)).length,
+          ]),
+          summary: [["Total Students", departmentRoster.length], ["Average Attendance", `${averageAttendance.toFixed(1)}%`], ["Average Academic Performance", `${averageAssessment.toFixed(1)}%`], ["At-Risk Students", riskCount], ["Active Interventions", activeInterventions]],
+        }} /><ReportExportButton report={riskReport} /><ReportExportButton report={interventionReport} /><ReportExportButton report={accreditationReport} /><DemoControls /></div>
       </header>
       <main className="space-y-5 p-4 sm:p-6">
         <p className="text-xs text-zinc-400">Department: <span className="text-zinc-200">{department}</span></p>

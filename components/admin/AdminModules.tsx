@@ -25,6 +25,8 @@ import {
   type DemoSettings,
 } from "@/lib/demo-model";
 import { useDemoState } from "@/lib/use-demo-state";
+import { ReportExportButton } from "@/components/reports/ReportExportButton";
+import type { ReportDocument } from "@/lib/reports/types";
 
 const panel = "min-w-0 rounded-2xl border border-white/10 bg-[#111a1b]/90 p-5";
 const statuses: DemoEscalationStatus[] = ["New", "In Review", "Actioned", "Closed"];
@@ -32,8 +34,8 @@ const standards = ["NAAC", "NBA", "ABET"] as const;
 type AccreditationStandard = (typeof standards)[number];
 type AccreditationAssessment = "Overall" | "CIA" | "Midterm" | "Lab" | "Assignment";
 
-function AdminHeader({ title, subtitle }: { title: string; subtitle: string }) {
-  return <div className="print:hidden"><Topbar title={title} subtitle={subtitle} workspace="Institution" /></div>;
+function AdminHeader({ title, subtitle, report }: { title: string; subtitle: string; report?: ReportDocument }) {
+  return <div className="print:hidden"><Topbar title={title} subtitle={subtitle} workspace="Institution" action={report ? <ReportExportButton report={report} /> : null} /></div>;
 }
 
 function Metric({ label, value, detail }: { label: string; value: string; detail?: string }) {
@@ -114,8 +116,36 @@ export function AdminDashboard() {
 
   return (
     <div>
-      <AdminHeader title={normalizeDemoSettings(state.settings).institutionName || "Institution Command Center"} subtitle="Live institutional risk, attendance, intervention, and course health." />
+      <AdminHeader title={normalizeDemoSettings(state.settings).institutionName || "Institution Command Center"} subtitle="Live institutional risk, attendance, intervention, and course health." report={{
+        type: "admin-institution-summary",
+        title: "Institution Academic Intelligence Report",
+        period: state.term,
+        columns: ["Department", "Course", "Students", "Attendance", "Academic Performance", "At Risk", "Critical", "Recovery Progress"],
+        rows: roster.map((item) => [item.department, item.course, item.totalStudents, `${item.averageAttendance}%`, `${item.averageAssessment}%`, item.atRiskStudents, item.criticalStudents, `${item.recoveryProgress}%`]),
+        summary: [["Total Students", students.length], ["Total Faculty", "—"], ["Total Mentors", "—"], ["Departments", new Set(students.map((student) => student.department)).size], ["Average Attendance", `${averageAttendance.toFixed(1)}%`], ["At-Risk Students", riskCounts.moderate + riskCounts.critical], ["Critical Students", riskCounts.critical], ["Active Interventions", activeInterventions]],
+      }} />
       <main className="space-y-5 p-4 sm:p-6">
+        <div className="flex flex-wrap gap-2">
+          <ReportExportButton report={{
+            type: "admin-attendance",
+            title: "Admin Institution Attendance Report",
+            period: state.term,
+            columns: ["Department", "Students", "Average Attendance", "Below Threshold", "Critical Attendance Cases"],
+            rows: [...new Set(students.map((student) => student.department))].map((department) => {
+              const cohort = students.filter((student) => student.department === department);
+              return [department, cohort.length, `${(cohort.reduce((sum, student) => sum + student.attendance, 0) / Math.max(cohort.length, 1)).toFixed(1)}%`, cohort.filter((student) => student.attendance < state.settings.attendanceMinimum).length, cohort.filter((student) => student.attendance < state.settings.attendanceMinimum && student.status === "Critical").length];
+            }),
+            summary: [["Total Students", students.length], ["Average Attendance", `${averageAttendance.toFixed(1)}%`]],
+          }} />
+          <ReportExportButton report={{
+            type: "admin-risk",
+            title: "Admin Institution Risk Report",
+            period: state.term,
+            columns: ["Student", "Department", "Course", "Attendance", "Academic Score", "Risk Score", "Risk Level", "Risk Factors"],
+            rows: students.map((student) => [student.name, student.department, student.course, `${student.attendance}%`, `${student.assessmentAverage}%`, student.risk.toFixed(1), student.status, student.riskDrivers.join(", ")]),
+            summary: [["At-Risk Students", riskCounts.moderate + riskCounts.critical], ["Critical Students", riskCounts.critical]],
+          }} />
+        </div>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <Metric label="Total students" value={String(students.length)} />
           <Metric label="Students at risk" value={String(riskCounts.moderate + riskCounts.critical)} />
@@ -210,7 +240,14 @@ export function AdminDepartments() {
 
   return (
     <div>
-      <AdminHeader title="Department & Course Analytics" subtitle="Compare current department and course outcomes using shared student and risk data." />
+      <AdminHeader title="Department & Course Analytics" subtitle="Compare current department and course outcomes using shared student and risk data." report={{
+        type: "admin-department-comparison",
+        title: "Admin Department Comparison",
+        period: state.term,
+        filters: { Department: department, Course: course, Risk: risk, Search: query || "All" },
+        columns: ["Department", "Course", "Student Count", "Attendance", "Academic Performance", "At Risk", "Critical", "Recovery Progress"],
+        rows: filtered.map((item) => [item.department, item.course, item.totalStudents, `${item.averageAttendance}%`, `${item.averageAssessment}%`, item.atRiskStudents, item.criticalStudents, `${item.recoveryProgress}%`]),
+      }} />
       <main className="space-y-5 p-4 sm:p-6">
         <section className={panel}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-white">Department/course performance</h2><p className="mt-1 text-xs text-zinc-500">Select a course row to inspect its students.</p></div></div>
@@ -286,7 +323,15 @@ export function AdminEscalations() {
 
   return (
     <div>
-      <AdminHeader title="Institutional Escalations" subtitle="Tier-1 cases are generated from live subject-level risk results." />
+      <AdminHeader title="Institutional Escalations" subtitle="Tier-1 cases are generated from live subject-level risk results." report={{
+        type: "admin-escalations",
+        title: "Admin Escalation Report",
+        period: state.term,
+        filters: { Status: filter },
+        columns: ["Student", "Department", "Risk Level", "Trigger", "Escalation Tier", "Owner", "Status", "Last Updated"],
+        rows: visible.map((candidate) => [candidate.student.name, candidate.student.department, candidate.student.status, candidate.criticalSubjects.join(", "), "Tier 1", candidate.student.mentor, candidate.status, state.escalationRecords[candidate.student.id]?.updatedAt ?? candidate.createdAt]),
+        summary: [["Total Escalations", visible.length], ["Active", visible.filter((item) => item.status !== "Closed").length]],
+      }} />
       <main className="space-y-5 p-4 sm:p-6">
         <section className={panel}>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-white">Tier-1 institutional intervention</h2><p className="mt-1 text-xs text-zinc-500">Rule: a student is critical in {normalizeDemoSettings(state.settings).escalationSubjects} or more subjects.</p></div><div className="flex items-center gap-2"><select aria-label="Filter escalations by status" value={filter} onChange={(event) => setFilter(event.target.value)} className="rounded-lg border border-white/10 bg-[#0b1213] px-3 py-2 text-xs text-zinc-300"><option>All</option>{statuses.map((status) => <option key={status}>{status}</option>)}</select><Badge tone="bad">{candidates.filter((item) => item.status !== "Closed").length} active</Badge></div></div>
@@ -358,7 +403,15 @@ export function AdminAccreditation() {
 
   return (
     <div>
-      <AdminHeader title="Accreditation Reporting" subtitle="Course outcome attainment calculated from current student demo assessments." />
+      <AdminHeader title="Accreditation Reporting" subtitle="Course outcome attainment calculated from current student demo assessments." report={{
+        type: "admin-accreditation",
+        title: "Admin Accreditation Report",
+        period: state.term,
+        filters: { Standard: standard, Course: course, Assessment: assessment, Cutoff: String(cutoff), Target: String(target) },
+        columns: ["Metric", "Department", "Numerator", "Denominator", "Percentage", "Status"],
+        rows: [[`${standard} attainment · ${course} · ${assessment}`, "Institution", met, calculated?.studentsAssessed ?? 0, `${calculated?.attainment ?? 0}%`, status]],
+        summary: [["Students Assessed", calculated?.studentsAssessed ?? 0], ["Target", `${target}%`]],
+      }} />
       <main className="space-y-5 p-4 sm:p-6 print:hidden">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="inline-flex rounded-xl border border-white/10 bg-white/[0.025] p-1" role="tablist" aria-label="Accreditation standard">{standards.map((item) => <button key={item} type="button" role="tab" aria-selected={standard === item} onClick={() => setStandard(item)} className={`rounded-lg px-4 py-2 text-xs font-semibold ${standard === item ? "bg-emerald-200/10 text-emerald-100" : "text-zinc-500 hover:text-white"}`}>{item}</button>)}</div>
@@ -400,6 +453,18 @@ export function AdminParentGateway() {
     const trigger = parentCommunicationTrigger(student, state);
     return trigger ? [{ student, trigger }] : [];
   });
+  const parentReport: ReportDocument = {
+    type: "admin-parent-gateway",
+    title: "Admin Parent Gateway Report",
+    period: state.term,
+    columns: ["Student", "Department", "Parent Gateway Status", "Message / Notification", "Sent Date", "Delivery Status"],
+    rows: communications.map(({ student, trigger }) => {
+      const record = state.parentContactRecords[student.id];
+      const sent = record?.status === "Sent" || state.dispatchedParentIds.includes(student.id);
+      return [student.name, student.department, sent ? "Sent" : "Pending", trigger, record?.updatedAt ?? "—", sent ? "Sent (simulated)" : "Pending"];
+    }),
+    summary: [["Notifications", communications.length], ["Sent", communications.filter(({ student }) => state.parentContactRecords[student.id]?.status === "Sent" || state.dispatchedParentIds.includes(student.id)).length]],
+  };
   const { notify, Toast } = useToast();
 
   const markSent = (studentId: number) => {
@@ -417,7 +482,7 @@ export function AdminParentGateway() {
 
   return (
     <div>
-      <AdminHeader title="Demo Notification Gateway" subtitle="Simulated parent communication tracking. No messages are sent." />
+      <AdminHeader title="Demo Notification Gateway" subtitle="Simulated parent communication tracking. No messages are sent." report={parentReport} />
       <main className="space-y-5 p-4 sm:p-6">
         <section className="rounded-2xl border border-amber-200/20 bg-amber-200/[0.05] p-4"><p className="font-semibold text-amber-100">DEMO NOTIFICATION GATEWAY</p><p className="mt-1 text-sm text-zinc-300">Demo only — no real message was sent. This workflow does not send WhatsApp, SMS, or email.</p></section>
         <section className={panel}>

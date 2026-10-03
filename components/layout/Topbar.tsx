@@ -1,13 +1,15 @@
 import { DemoControls } from "@/components/layout/DemoControls";
+import type { ReactNode } from "react";
 
 interface TopbarProps {
   title: string;
   subtitle: string;
   actionLabel?: string;
   workspace?: "Student" | "Faculty" | "Institution";
+  action?: ReactNode;
 }
 
-export function Topbar({ title, subtitle, workspace = "Student" }: TopbarProps) {
+export function Topbar({ title, subtitle, workspace = "Student", action }: TopbarProps) {
   return (
     <header className="sticky top-0 z-30 flex flex-col gap-4 border-b border-white/10 bg-[#0a1112]/90 px-4 py-4 backdrop-blur-xl sm:px-6 lg:flex-row lg:items-center lg:justify-between">
       <div>
@@ -16,7 +18,7 @@ export function Topbar({ title, subtitle, workspace = "Student" }: TopbarProps) 
         <p className="mt-1 text-sm text-zinc-400">{subtitle}</p>
       </div>
 
-      <DemoControls />
+      <div className="flex items-center gap-3">{action}<DemoControls /></div>
     </header>
   );
 }

@@ -31,6 +31,24 @@ test("face matching maps a verified descriptor to its uniquely registered user I
   );
 });
 
+test("the shared matcher supports Student, Faculty, Mentor, HOD, and Admin user IDs", () => {
+  const accounts = [
+    ["student-demo-001", 0.1],
+    ["faculty-demo-001", 0.45],
+    ["mentor-demo-001", 0.8],
+    ["hod-demo-001", 1.15],
+    ["admin-demo-001", 1.5],
+  ];
+  const identities = accounts.map(([userId, seed]) => ({
+    userId,
+    descriptors: [descriptor(seed), descriptor(seed, 0.001), descriptor(seed, -0.001)],
+  }));
+
+  for (const [index, [userId]] of accounts.entries()) {
+    assert.equal(findFaceMatch(identities[index].descriptors, identities), userId);
+  }
+});
+
 test("face matching rejects unknown, malformed, and ambiguous identities", () => {
   const registered = [descriptor(0.1), descriptor(0.1, 0.001), descriptor(0.1, -0.001)];
   assert.equal(

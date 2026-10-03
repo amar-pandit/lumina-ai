@@ -8,6 +8,10 @@ import { parseVoiceCommand, type ParsedAttendanceRow } from "@/lib/voice-parser"
 import { DemoControls } from "@/components/layout/DemoControls";
 import { DEMO_STATE_KEY, INITIAL_DEMO_STATE, countsAsAttending, getDemoRoster, type DemoAttendanceStatus, type DemoGradeRecord, type DemoInterventionStatus } from "@/lib/demo-model";
 import { useDemoState } from "@/lib/use-demo-state";
+import { ReportExportButton } from "@/components/reports/ReportExportButton";
+import type { ReportDocument } from "@/lib/reports/types";
+import { useDemoSession } from "@/components/auth/useDemoSession";
+import { HOD_DEPARTMENT } from "@/lib/hod-data";
 
 export type FacultyToolKind = "voice" | "grid" | "gradebook" | "heatmap" | "remedial" | "interventions";
 
@@ -92,6 +96,7 @@ function Pill({ children, tone = "neutral" }: { children: React.ReactNode; tone?
 
 export function FacultyTools({ tool }: { tool: FacultyToolKind }) {
   const [demoState, setDemoState] = useDemoState(DEMO_STATE_KEY, INITIAL_DEMO_STATE);
+  const { session } = useDemoSession();
   const committedRows = demoState.committedVoiceRows;
   const attendance = demoState.attendanceByStudent;
   const grades = demoState.gradebook;
@@ -152,6 +157,101 @@ export function FacultyTools({ tool }: { tool: FacultyToolKind }) {
     && (attendanceFilter === "All" || attendance[student.id] === attendanceFilter),
   );
   const attendancePercent = Math.round(roster.reduce((total, student) => total + student.attendance, 0) / roster.length);
+  const reportRoster = roster.filter((student) => (
+    session?.role === "HOD" ? student.department === HOD_DEPARTMENT
+      : session?.role === "MENTOR" ? student.mentor === session.user.name
+        : true
+  ));
+  const visibleReportRoster = reportRoster
+    .filter((student) => attendanceFilter === "All" || attendance[student.id] === attendanceFilter)
+    .filter((student) => `${student.name} ${student.rollNo}`.toLowerCase().includes(attendanceQuery.toLowerCase()));
+  const statusCounts = attendanceStatuses.map((status) => [
+    status,
+    visibleReportRoster.filter((student) => (attendance[student.id] ?? "Absent") === status).length,
+  ] as [string, number]);
+  const report: ReportDocument = (() => {
+    if (tool === "grid") return {
+      type: session?.role === "MENTOR" ? "mentor-attendance" : "faculty-attendance",
+      title: session?.role === "HOD" ? "HOD Department Attendance Report" : session?.role === "MENTOR" ? "Mentor Attendance Report" : "Faculty Attendance Report",
+      period: demoState.term,
+      filters: { Department: session?.role === "HOD" ? HOD_DEPARTMENT : "All", Status: attendanceFilter, Search: attendanceQuery || "All" },
+      columns: ["Course", "Batch / Year", "Student", "Roll Number", "Attendance %", "Current Status", "Present", "Absent", "On Duty", "Medical Leave", "Total Classes"],
+      rows: visibleReportRoster.map((student) => {
+          const status = attendance[student.id] ?? "Absent";
+          return [student.course, `Year ${student.year}`, student.name, student.rollNo, `${student.attendance}%`, status, Number(status === "Present"), Number(status === "Absent"), Number(status === "On Duty"), Number(status === "Medical Leave"), demoState.attendanceSimulator.totalClasses];
+        }),
+      summary: [
+        ["Total Students", visibleReportRoster.length],
+        ["Average Attendance", `${(visibleReportRoster.reduce((sum, student) => sum + student.attendance, 0) / Math.max(visibleReportRoster.length, 1)).toFixed(1)}%`],
+        ["Below Attendance Threshold", visibleReportRoster.filter((student) => student.attendance < demoState.settings.attendanceMinimum).length],
+        ...statusCounts,
+      ],
+    };
+    if (tool === "gradebook") return {
+      type: session?.role === "MENTOR" ? "mentor-academic" : "faculty-gradebook",
+      title: session?.role === "MENTOR" ? "Mentor Academic Report" : "Faculty Gradebook Report",
+      period: demoState.term,
+      columns: ["Student", "Roll Number", "CIA", "Midterm", "Lab", "Assignment", "Total", "Percentage", "Normalized Score", "Risk Score", "Risk Level"],
+      rows: reportRoster.map((student) => {
+        const grade = grades[student.id];
+        const total = grade.cia + grade.midterm + grade.lab + grade.assignment;
+        return [student.name, student.rollNo, grade.cia, grade.midterm, grade.lab, grade.assignment, total.toFixed(1), `${student.assessmentAverage}%`, `${((grade.cia + grade.midterm) / 2).toFixed(1)}%`, student.risk.toFixed(1), student.status];
+      }),
+      summary: [
+        ["Class Average", `${(reportRoster.reduce((sum, student) => sum + student.assessmentAverage, 0) / Math.max(reportRoster.length, 1)).toFixed(1)}%`],
+        ["Highest Score", `${Math.max(...reportRoster.map((student) => student.assessmentAverage), 0)}%`],
+        ["Lowest Score", `${reportRoster.length ? Math.min(...reportRoster.map((student) => student.assessmentAverage)) : 0}%`],
+        ["At-Risk Students", reportRoster.filter((student) => student.status !== "Safe").length],
+        ["Critical Students", reportRoster.filter((student) => student.status === "Critical").length],
+      ],
+    };
+    if (tool === "heatmap" && session?.role === "MENTOR") return {
+      type: "mentor-risk",
+      title: "Mentor Risk Report",
+      period: demoState.term,
+      columns: ["Student", "Roll", "Risk Score", "Risk Level", "Risk Factors", "Recommended Action", "Recovery Status"],
+      rows: reportRoster.map((student) => [student.name, student.rollNo, student.risk.toFixed(1), student.status, student.riskDrivers.join(", "), student.courseRisk.recommendations.join("; "), demoState.interventions.find((item) => item.student === student.name)?.status ?? "Not started"]),
+    };
+    if (tool === "heatmap") return {
+      type: session?.role === "MENTOR" ? "mentor-risk" : "faculty-curriculum-health",
+      title: session?.role === "MENTOR" ? "Mentor Risk Report" : "Curriculum Health Report",
+      period: demoState.term,
+      columns: ["Curriculum Unit", "Topic", "Mastery %", "Failure %", "Bottleneck"],
+      rows: curriculum.flatMap((unit) => unit.topics.map((topic) => [unit.unit, topic.name, topic.mastery, 100 - topic.mastery, topic.mastery < 50 ? "Yes" : "No"])),
+      summary: [["Cohort Students", reportRoster.length], ["Topics Above Failure Threshold", curriculum.flatMap((unit) => unit.topics).filter((topic) => 100 - topic.mastery > 50).length]],
+    };
+    if (tool === "remedial") return {
+      type: session?.role === "MENTOR" ? "mentor-recovery" : "faculty-remedial-groups",
+      title: session?.role === "MENTOR" ? "Mentor Recovery Report" : "Remedial Groups Report",
+      period: demoState.term,
+      columns: ["Student", "Roll", "Risk Level", "Weak Subject / Topic", "Recommended Recovery", "Remedial Group", "Intervention Status"],
+      rows: reportRoster.filter((student) => student.status !== "Safe").map((student) => [
+        student.name, student.rollNo, student.status, student.issue,
+        student.courseRisk.recommendations.join("; "), assignedGroups[String(student.id)] ?? "Unassigned",
+        demoState.interventions.find((item) => item.student === student.name)?.status ?? "Pending",
+      ]),
+      summary: [["Total Remedial Groups", new Set(Object.values(assignedGroups)).size], ["Students Assigned", Object.keys(assignedGroups).length], ["Critical Students", reportRoster.filter((student) => student.status === "Critical").length]],
+    };
+    if (tool === "interventions") return {
+      type: session?.role === "MENTOR" ? "mentor-interventions" : "faculty-interventions",
+      title: session?.role === "MENTOR" ? "Mentor Intervention Report" : "Faculty Intervention Report",
+      period: demoState.term,
+      columns: ["Student", "Risk Level", "Trigger", "Intervention", "Owner", "Status", "Created Date", "Last Updated"],
+      rows: demoState.interventions.filter((item) => reportRoster.some((student) => student.name === item.student)).map((item) => {
+        const student = reportRoster.find((entry) => entry.name === item.student);
+        return [item.student, student?.status ?? "Unknown", student?.issue ?? "—", item.type, item.mentor, item.status, item.date, item.date];
+      }),
+      summary: [["Total Interventions", demoState.interventions.length], ["Active", demoState.interventions.filter((item) => item.status === "Scheduled").length], ["Completed", demoState.interventions.filter((item) => item.status === "Completed").length]],
+    };
+    return {
+      type: session?.role === "MENTOR" ? "mentor-dashboard" : "faculty-dashboard",
+      title: session?.role === "MENTOR" ? "Mentor Academic Summary" : "Faculty Academic Summary",
+      period: demoState.term,
+      columns: ["Student", "Roll", "Attendance", "Academic Performance", "Risk Score", "Risk Level", "Recovery / Intervention"],
+      rows: reportRoster.map((student) => [student.name, student.rollNo, `${student.attendance}%`, `${student.assessmentAverage}%`, student.risk.toFixed(1), student.status, demoState.interventions.find((item) => item.student === student.name)?.status ?? "Not started"]),
+      summary: [["Total Students", reportRoster.length], ["Average Attendance", `${(reportRoster.reduce((sum, student) => sum + student.attendance, 0) / Math.max(reportRoster.length, 1)).toFixed(1)}%`], ["Critical Students", reportRoster.filter((student) => student.status === "Critical").length], ["Active Interventions", demoState.interventions.filter((item) => item.status === "Scheduled").length]],
+    };
+  })();
 
   useEffect(() => {
     if (tool !== "grid") return;
@@ -375,5 +475,5 @@ export function FacultyTools({ tool }: { tool: FacultyToolKind }) {
     </>;
   };
 
-  return <div><header className="border-b border-white/10 bg-[#0a1112]/90 px-4 py-4 backdrop-blur-xl sm:px-6"><div className="mx-auto flex max-w-[1680px] flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase text-emerald-200/80">Faculty workspace <span className="px-1.5 text-zinc-600">/</span> Demo mode</p><h1 className="mt-1 text-xl font-semibold text-white sm:text-2xl">{info.title}</h1><p className="mt-1 text-xs text-zinc-400">{info.subtitle}</p></div><DemoControls /></div></header><main className="mx-auto max-w-[1680px] space-y-5 p-4 sm:p-6">{tool === "grid" ? <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.025] px-3 py-2 text-[10px] text-zinc-500"><Keyboard className="h-3.5 w-3.5" />Select a row or batch, then press P, A, or O.</div> : null}{tool === "gradebook" ? <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.025] px-3 py-2 text-[10px] text-zinc-500"><FileSpreadsheet className="h-3.5 w-3.5" />Normalized preview is not written back to original assessment values.</div> : null}{content()}</main>{notice ? <div role="status" aria-live="polite" className="fixed bottom-5 right-5 z-[90] flex items-center gap-2 rounded-xl border border-emerald-200/20 bg-[#102019] px-4 py-3 text-sm text-emerald-100 shadow-xl"><CheckCircle2 className="h-4 w-4" />{notice}</div> : null}</div>;
+  return <div><header className="border-b border-white/10 bg-[#0a1112]/90 px-4 py-4 backdrop-blur-xl sm:px-6"><div className="mx-auto flex max-w-[1680px] flex-wrap items-center justify-between gap-3"><div><p className="text-[10px] font-semibold uppercase text-emerald-200/80">Faculty workspace <span className="px-1.5 text-zinc-600">/</span> Demo mode</p><h1 className="mt-1 text-xl font-semibold text-white sm:text-2xl">{info.title}</h1><p className="mt-1 text-xs text-zinc-400">{info.subtitle}</p></div><div className="flex items-center gap-3"><ReportExportButton report={report} /><DemoControls /></div></div></header><main className="mx-auto max-w-[1680px] space-y-5 p-4 sm:p-6">{tool === "grid" ? <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.025] px-3 py-2 text-[10px] text-zinc-500"><Keyboard className="h-3.5 w-3.5" />Select a row or batch, then press P, A, or O.</div> : null}{tool === "gradebook" ? <div className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.025] px-3 py-2 text-[10px] text-zinc-500"><FileSpreadsheet className="h-3.5 w-3.5" />Normalized preview is not written back to original assessment values.</div> : null}{content()}</main>{notice ? <div role="status" aria-live="polite" className="fixed bottom-5 right-5 z-[90] flex items-center gap-2 rounded-xl border border-emerald-200/20 bg-[#102019] px-4 py-3 text-sm text-emerald-100 shadow-xl"><CheckCircle2 className="h-4 w-4" />{notice}</div> : null}</div>;
 }

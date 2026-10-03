@@ -12,11 +12,15 @@ import { facultyStudents, riskHeatmap } from "@/lib/demo-data";
 import { DEMO_STATE_KEY, INITIAL_DEMO_STATE, getDemoRoster } from "@/lib/demo-model";
 import { useDemoState } from "@/lib/use-demo-state";
 import { useDemoSession } from "@/components/auth/useDemoSession";
+import { ReportExportButton } from "@/components/reports/ReportExportButton";
 
 export function FacultyDashboardPage({ workspace = "Faculty" }: { workspace?: "Faculty" | "Mentor" }) {
   const [demoState, setDemoState] = useDemoState(DEMO_STATE_KEY, INITIAL_DEMO_STATE);
   const { session } = useDemoSession();
   const facultyRoster = getDemoRoster(demoState);
+  const reportRoster = workspace === "Mentor"
+    ? facultyRoster.filter((student) => student.mentor === session?.user.name)
+    : facultyRoster;
   const [selectedStudent, setSelectedStudent] = useState<(typeof facultyStudents)[number] | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const criticalCount = facultyRoster.filter((student) => student.status === "Critical").length;
@@ -53,6 +57,21 @@ export function FacultyDashboardPage({ workspace = "Faculty" }: { workspace?: "F
                 <ArrowUpRight className="h-3.5 w-3.5" />
               </Link>
             ) : null}
+            {workspace === "Mentor" && session?.role === "MENTOR" ? <ReportExportButton report={{
+              type: "mentor-dashboard",
+              title: "Mentor Academic & Intervention Report",
+              period: demoState.term,
+              columns: ["Mentee", "Roll", "Attendance", "Academic Performance", "Risk Score", "Risk Level", "Intervention Status"],
+              rows: reportRoster.map((student) => [student.name, student.rollNo, `${student.attendance}%`, `${student.assessmentAverage}%`, student.risk.toFixed(1), student.status, demoState.interventions.find((item) => item.student === student.name)?.status ?? "Not started"]),
+              summary: [["Mentor Name", session?.user.name ?? "Mentor"], ["Assigned Students", reportRoster.length], ["Average Attendance", `${(reportRoster.reduce((sum, student) => sum + student.attendance, 0) / Math.max(reportRoster.length, 1)).toFixed(1)}%`], ["At-Risk Students", reportRoster.filter((student) => student.status !== "Safe").length], ["Critical Students", reportRoster.filter((student) => student.status === "Critical").length], ["Recovery Progress", `${reportRoster.length ? Math.round((reportRoster.filter((student) => demoState.interventions.some((item) => item.student === student.name && item.status === "Completed")).length / reportRoster.length) * 100) : 0}%`], ["Active Interventions", demoState.interventions.filter((item) => item.status === "Scheduled" && reportRoster.some((student) => student.name === item.student)).length]],
+            }} /> : <ReportExportButton report={{
+              type: "faculty-dashboard",
+              title: "Faculty Academic Report",
+              period: demoState.term,
+              columns: ["Student", "Roll", "Attendance", "Academic Performance", "Risk Score", "Risk Level", "Intervention Status"],
+              rows: facultyRoster.map((student) => [student.name, student.rollNo, `${student.attendance}%`, `${student.assessmentAverage}%`, student.risk.toFixed(1), student.status, demoState.interventions.find((item) => item.student === student.name)?.status ?? "Not started"]),
+              summary: [["Faculty Name", session?.user.name ?? "Faculty"], ["Course", "All assigned courses"], ["Total Students", facultyRoster.length], ["Average Attendance", `${(facultyRoster.reduce((sum, student) => sum + student.attendance, 0) / Math.max(facultyRoster.length, 1)).toFixed(1)}%`], ["Average Academic Performance", `${courseHealth.toFixed(1)}%`], ["Safe Students", safeCount], ["Moderate Students", moderateCount], ["Critical Students", criticalCount], ["Active Interventions", demoState.interventions.filter((item) => item.status === "Scheduled").length]],
+            }} />}
             <DemoControls />
           </div>
         </div>

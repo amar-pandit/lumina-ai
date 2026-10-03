@@ -32,6 +32,12 @@ Face detection and recognition run locally in the browser using the MIT-licensed
 
 Face ID captures three live descriptors and performs identity matching with a confidence threshold, rejecting close competing matches. Browser-based face matching cannot reliably distinguish a live person from a photo/video spoof; it is not a certified or spoof-proof biometric authenticator and should not be used as the sole factor for sensitive production accounts without a vetted liveness/anti-spoofing system. Users can always choose Email & Password instead. Demo credentials are defined in `lib/auth/demo-account-credentials.ts`.
 
+## PDF reports
+
+Faculty tools export attendance, gradebook, curriculum, remedial, intervention, and dashboard reports from the current `lumina-demo-state`. The Mentor dashboard and shared Mentor tools produce mentee-scoped reports; the HOD workspace exports department summary, risk, and accreditation reports; Admin pages export institution summary, attendance, risk, department comparison, escalation, accreditation, and simulated parent-gateway reports. HOD and Admin report access is independently checked against the signed server session.
+
+PDFs are generated as portrait A4 documents with tables, repeating headers, fixed page footers, pagination, and an in-app preview. Saved history stores only user-scoped report metadata in browser localStorage; it does not copy report rows. History actions rebuild a PDF from the currently available shared demo data. Current page filters are included in report metadata and affect the export where the page supplies filtered rows. Since the existing demo state is browser-local, report generation and report history use the same browser-local storage context.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
