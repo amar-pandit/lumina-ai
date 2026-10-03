@@ -6,6 +6,15 @@ export interface ReportDocument {
   summary?: Array<[string, string | number]>;
   period?: string;
   filters?: Record<string, string>;
+  workbookSheets?: ReportSheet[];
+  reportSheetName?: string;
+  summarySheetName?: string;
+}
+
+export interface ReportSheet {
+  name: string;
+  columns: string[];
+  rows: Array<Array<string | number>>;
 }
 
 export interface ReportHistoryItem {

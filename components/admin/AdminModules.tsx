@@ -27,6 +27,7 @@ import {
 import { useDemoState } from "@/lib/use-demo-state";
 import { ReportExportButton } from "@/components/reports/ReportExportButton";
 import type { ReportDocument } from "@/lib/reports/types";
+import { DEMO_USER_IDS } from "@/lib/auth-types";
 
 const panel = "min-w-0 rounded-2xl border border-white/10 bg-[#111a1b]/90 p-5";
 const statuses: DemoEscalationStatus[] = ["New", "In Review", "Actioned", "Closed"];
@@ -113,6 +114,21 @@ export function AdminDashboard() {
   const activeEscalations = escalations.filter((item) => item.status !== "Closed");
   const recentInterventions = [...state.interventions].sort((a, b) => b.date.localeCompare(a.date)).slice(0, 5);
   const courseOverview = roster.slice(0, 12);
+  const completedInterventionStudents = new Set(state.interventions
+    .filter((item) => item.status === "Completed")
+    .map((item) => item.student));
+  const departmentOverview = [...new Set(students.map((student) => student.department))].map((department) => {
+    const cohort = students.filter((student) => student.department === department);
+    return [
+      department,
+      cohort.length,
+      `${(cohort.reduce((total, student) => total + student.attendance, 0) / Math.max(cohort.length, 1)).toFixed(1)}%`,
+      `${(cohort.reduce((total, student) => total + student.assessmentAverage, 0) / Math.max(cohort.length, 1)).toFixed(1)}%`,
+      cohort.filter((student) => student.status !== "Safe").length,
+      cohort.filter((student) => student.status === "Critical").length,
+      `${cohort.length ? Math.round(cohort.filter((student) => completedInterventionStudents.has(student.name)).length / cohort.length * 100) : 0}%`,
+    ] as Array<string | number>;
+  });
 
   return (
     <div>
@@ -120,9 +136,33 @@ export function AdminDashboard() {
         type: "admin-institution-summary",
         title: "Institution Academic Intelligence Report",
         period: state.term,
-        columns: ["Department", "Course", "Students", "Attendance", "Academic Performance", "At Risk", "Critical", "Recovery Progress"],
-        rows: roster.map((item) => [item.department, item.course, item.totalStudents, `${item.averageAttendance}%`, `${item.averageAssessment}%`, item.atRiskStudents, item.criticalStudents, `${item.recoveryProgress}%`]),
-        summary: [["Total Students", students.length], ["Total Faculty", "—"], ["Total Mentors", "—"], ["Departments", new Set(students.map((student) => student.department)).size], ["Average Attendance", `${averageAttendance.toFixed(1)}%`], ["At-Risk Students", riskCounts.moderate + riskCounts.critical], ["Critical Students", riskCounts.critical], ["Active Interventions", activeInterventions]],
+        reportSheetName: "Department Overview",
+        summarySheetName: "Institution Summary",
+        columns: ["Department", "Students", "Attendance %", "Academic Performance %", "At Risk", "Critical", "Recovery Progress %"],
+        rows: departmentOverview,
+        summary: [["Total Students", students.length], ["Total Faculty Accounts", Object.keys(DEMO_USER_IDS).filter((role) => role === "FACULTY").length], ["Total Mentor Accounts", Object.keys(DEMO_USER_IDS).filter((role) => role === "MENTOR").length], ["Departments", new Set(students.map((student) => student.department)).size], ["Average Attendance", `${averageAttendance.toFixed(1)}%`], ["At-Risk Students", riskCounts.moderate + riskCounts.critical], ["Critical Students", riskCounts.critical], ["Active Interventions", activeInterventions]],
+        workbookSheets: [
+          {
+            name: "Course Overview",
+            columns: ["Department", "Course", "Students", "Attendance %", "Academic Performance %", "At Risk", "Critical", "Recovery Progress %"],
+            rows: roster.map((item) => [item.department, item.course, item.totalStudents, `${item.averageAttendance}%`, `${item.averageAssessment}%`, item.atRiskStudents, item.criticalStudents, `${item.recoveryProgress}%`]),
+          },
+          {
+            name: "Risk Distribution",
+            columns: ["Risk Level", "Students", "Percentage"],
+            rows: [
+              ["CRITICAL", riskCounts.critical, `${students.length ? (riskCounts.critical / students.length * 100).toFixed(1) : "0.0"}%`],
+              ["MODERATE", riskCounts.moderate, `${students.length ? (riskCounts.moderate / students.length * 100).toFixed(1) : "0.0"}%`],
+              ["SAFE", riskCounts.safe, `${students.length ? (riskCounts.safe / students.length * 100).toFixed(1) : "0.0"}%`],
+              ["RECOVERING", riskCounts.recovering, `${students.length ? (riskCounts.recovering / students.length * 100).toFixed(1) : "0.0"}%`],
+            ],
+          },
+          {
+            name: "Student Risk Data",
+            columns: ["Student", "Department", "Course", "Attendance %", "Academic Performance %", "Risk Score", "Risk Level", "Risk Factors"],
+            rows: students.map((student) => [student.name, student.department, student.course, `${student.attendance}%`, `${student.assessmentAverage}%`, student.risk, student.status, student.riskDrivers.join(", ")]),
+          },
+        ],
       }} />
       <main className="space-y-5 p-4 sm:p-6">
         <div className="flex flex-wrap gap-2">

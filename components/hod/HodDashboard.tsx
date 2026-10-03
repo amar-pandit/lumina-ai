@@ -43,7 +43,7 @@ export function HodDashboard() {
   const averageAssessment = departmentRoster.length
     ? departmentRoster.reduce((total, student) => total + student.assessmentAverage, 0) / departmentRoster.length
     : 0;
-  const courseSummary = useMemo(() => {
+  const courseSummary = (() => {
     const names = [...new Set(departmentRoster.map((student) => student.course))].sort();
     return names.map((course) => {
       const students = departmentRoster.filter((student) => student.course === course);
@@ -56,10 +56,36 @@ export function HodDashboard() {
         attendance: average((student) => student.attendance),
         assessment: average((student) => student.assessmentAverage),
         atRisk: students.filter((student) => student.status !== "Safe").length,
+        recoveryProgress: students.length
+          ? Math.round(students.filter((student) => interventions.some((item) => item.student === student.name && item.status === "Completed")).length / students.length * 100)
+          : 0,
         mentors: [...new Set(students.map((student) => student.mentor))].join(", "),
       };
     });
-  }, [departmentRoster]);
+  })();
+  const courseYearSummary = [...new Set(departmentRoster.map((student) => `${student.course}::${student.year}`))]
+    .map((key) => {
+      const [course, yearValue] = key.split("::");
+      const group = departmentRoster.filter((student) => student.course === course && String(student.year) === yearValue);
+      const average = (select: (student: (typeof group)[number]) => number) => (
+        group.length ? group.reduce((total, student) => total + select(student), 0) / group.length : 0
+      );
+      const groupInterventions = interventions.filter((item) => group.some((student) => student.name === item.student));
+      const recoveryProgress = group.length
+        ? Math.round(group.filter((student) => groupInterventions.some((item) => item.student === student.name && item.status === "Completed")).length / group.length * 100)
+        : 0;
+      return {
+        department,
+        course,
+        year: `Year ${yearValue}`,
+        students: group.length,
+        attendance: average((student) => student.attendance),
+        academic: average((student) => student.assessmentAverage),
+        atRisk: group.filter((student) => student.status !== "Safe").length,
+        critical: group.filter((student) => student.status === "Critical").length,
+        recoveryProgress,
+      };
+    });
   const riskReport: ReportDocument = {
     type: "hod-risk",
     title: "HOD Department Risk Report",
@@ -108,15 +134,35 @@ export function HodDashboard() {
           type: "hod-department-summary",
           title: "HOD Department Academic Report",
           period: state.term,
+          reportSheetName: "Department Summary",
+          summarySheetName: "Department Summary Metrics",
           filters: { Department: department },
-          columns: ["Department", "Course", "Students", "Average Attendance", "Average Academic Performance", "At Risk", "Critical", "Active Interventions"],
-          rows: courseSummary.map((item) => [
-            department, item.course, item.students, `${item.attendance.toFixed(1)}%`,
-            `${item.assessment.toFixed(1)}%`, item.atRisk,
-            departmentRoster.filter((student) => student.course === item.course && student.status === "Critical").length,
-            interventions.filter((intervention) => intervention.status === "Scheduled" && departmentRoster.some((student) => student.name === intervention.student && student.course === item.course)).length,
+          columns: ["Department", "Course", "Batch / Year", "Students", "Average Attendance %", "Average Academic Performance %", "At Risk", "Critical", "Recovery Progress %"],
+          rows: courseYearSummary.map((item) => [
+            item.department, item.course, item.year, item.students, `${item.attendance.toFixed(1)}%`,
+            `${item.academic.toFixed(1)}%`, item.atRisk, item.critical, `${item.recoveryProgress}%`,
           ]),
-          summary: [["Total Students", departmentRoster.length], ["Average Attendance", `${averageAttendance.toFixed(1)}%`], ["Average Academic Performance", `${averageAssessment.toFixed(1)}%`], ["At-Risk Students", riskCount], ["Active Interventions", activeInterventions]],
+          summary: [["Department", department], ["Total Students", departmentRoster.length], ["Total Faculty", "Not available in shared demo data"], ["Average Attendance", `${averageAttendance.toFixed(1)}%`], ["Average Academic Performance", `${averageAssessment.toFixed(1)}%`], ["At-Risk Students", riskCount], ["Critical Students", departmentRoster.filter((student) => student.status === "Critical").length], ["Active Interventions", activeInterventions]],
+          workbookSheets: [
+            {
+              name: "Course Performance",
+              columns: ["Department", "Course", "Students", "Average Attendance %", "Average Academic Performance %", "At Risk", "Critical", "Recovery Progress %"],
+              rows: courseSummary.map((item) => [
+                department, item.course, item.students, `${item.attendance.toFixed(1)}%`, `${item.assessment.toFixed(1)}%`,
+                item.atRisk, departmentRoster.filter((student) => student.course === item.course && student.status === "Critical").length, `${item.recoveryProgress}%`,
+              ]),
+            },
+            {
+              name: "Student Risk",
+              columns: ["Student", "Roll Number", "Course", "Attendance %", "Academic Performance %", "Risk Score", "Risk Level", "Risk Factors"],
+              rows: departmentRoster.map((student) => [student.name, student.rollNo, student.course, `${student.attendance}%`, `${student.assessmentAverage}%`, student.risk, student.status, student.riskDrivers.join(", ")]),
+            },
+            {
+              name: "Interventions",
+              columns: interventionReport.columns,
+              rows: interventionReport.rows,
+            },
+          ],
         }} /><ReportExportButton report={riskReport} /><ReportExportButton report={interventionReport} /><ReportExportButton report={accreditationReport} /><DemoControls /></div>
       </header>
       <main className="space-y-5 p-4 sm:p-6">

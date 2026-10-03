@@ -2,6 +2,8 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { canGenerateReport } from "../lib/reports/access.ts";
 import { buildReportPdf } from "../lib/reports/pdf.ts";
+import XLSX from "xlsx-js-style";
+import { buildReportCsv, buildReportWorkbook } from "../lib/reports/tabular-export.ts";
 
 test("report access is determined by authenticated role", () => {
   assert.equal(canGenerateReport("FACULTY", "faculty-attendance"), true);
@@ -48,6 +50,57 @@ test("report PDF is a valid multipage A4 document for the demo roster size", () 
     assert.ok(contents.includes("DEMO REPORT"));
     assert.ok(contents.includes("Student"));
   });
+
   const contents = pages.map((page) => page.join("")).join("");
   report.rows.forEach((row) => assert.ok(contents.includes(`(${row[1]})`), `missing roster row ${row[1]}`));
+});
+
+test("Excel and CSV exports preserve report rows, formatting, filters, and workbook sheets", () => {
+  const report = {
+    title: "Faculty Academic Report",
+    type: "faculty-dashboard",
+    reportSheetName: "Attendance",
+    summarySheetName: "Faculty Summary",
+    columns: ["Student", "Risk Score", "Risk Level"],
+    rows: [
+      ["Amar Kumar", 29.5, "SAFE"],
+      ["Rahul Sharma", 48.9, "MODERATE"],
+      ["Aarav Mehta", 75, "CRITICAL"],
+      ["Riya Recovering", 39.3, "RECOVERING"],
+    ],
+    summary: [["Total Students", 4]],
+    workbookSheets: [{
+      name: "Risk",
+      columns: ["Student", "Risk Score", "Risk Level"],
+      rows: [["Amar Kumar", 29.5, "SAFE"]],
+    }],
+  };
+  const workbook = buildReportWorkbook(report, "Dr. Meera Shah", new Date("2026-10-03T10:00:00Z"));
+  assert.deepEqual(workbook.SheetNames, ["Attendance", "Risk", "Faculty Summary"]);
+  const riskSheet = workbook.Sheets.Attendance;
+  assert.equal(riskSheet["!autofilter"].ref, "A1:C5");
+  assert.equal(riskSheet["!freeze"].ySplit, 1);
+  assert.equal(riskSheet.B2.s.fill.fgColor.rgb, "E2F0D9");
+  assert.equal(riskSheet.C3.s.fill.fgColor.rgb, "FFF2CC");
+  assert.equal(riskSheet.C4.s.fill.fgColor.rgb, "FCE4D6");
+  assert.equal(riskSheet.C5.s.fill.fgColor.rgb, "DDEBF7");
+
+  const bytes = XLSX.write(workbook, { bookType: "xlsx", type: "buffer", cellStyles: true });
+  const reopened = XLSX.read(bytes, { type: "buffer", cellStyles: true });
+  assert.deepEqual(reopened.SheetNames, workbook.SheetNames);
+  assert.equal(reopened.Sheets.Attendance["A2"].v, "Amar Kumar");
+  assert.equal(reopened.Sheets.Attendance["B3"].v, 48.9);
+  assert.equal(reopened.Sheets.Attendance["C4"].v, "CRITICAL");
+
+  const csv = buildReportCsv(report);
+  assert.ok(csv.startsWith("\uFEFF"));
+  assert.ok(csv.includes('"Amar Kumar","29.5","SAFE"'));
+  assert.equal(csv.split("\r\n").length, report.rows.length + 1);
+
+  const escapedCsv = buildReportCsv({
+    ...report,
+    columns: ["Name", "Note"],
+    rows: [['=HYPERLINK("x")', 'Contains, comma and "quotes"']],
+  });
+  assert.ok(escapedCsv.includes(`"'=HYPERLINK(""x"")","Contains, comma and ""quotes"""`));
 });

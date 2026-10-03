@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Download, FileText, History, X } from "lucide-react";
+import { Download, FileSpreadsheet, FileText, History, TableProperties, X } from "lucide-react";
 import { useDemoSession } from "@/components/auth/useDemoSession";
 import type { ReportDocument, ReportHistoryItem } from "@/lib/reports/types";
 import { buildReportPdf } from "@/lib/reports/pdf";
+import { buildReportCsv, createReportWorkbookBlob } from "@/lib/reports/tabular-export";
 
 const REPORT_HISTORY_KEY = "lumina-report-history";
 
@@ -18,6 +19,7 @@ export function ReportExportButton({ report }: { report: ReportDocument }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
+  const [preparing, setPreparing] = useState<"pdf" | "excel" | "csv" | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [history, setHistory] = useState<ReportHistoryItem[]>([]);
   const pdfRef = useRef<ReturnType<typeof buildReportPdf> | null>(null);
@@ -48,6 +50,8 @@ export function ReportExportButton({ report }: { report: ReportDocument }) {
   };
   const showPreview = async () => {
     setBusy(true);
+    setPreparing("pdf");
+    setError("");
     try {
       await authorize();
       createPreview();
@@ -56,7 +60,7 @@ export function ReportExportButton({ report }: { report: ReportDocument }) {
       setError(cause instanceof Error && cause.message.includes("403")
         ? "Your authenticated role cannot generate this report."
         : "Unable to generate this PDF. Please try again.");
-    } finally { setBusy(false); }
+    } finally { setPreparing(null); setBusy(false); }
   };
   const download = async (usePreview = true) => {
     setBusy(true);
@@ -70,6 +74,48 @@ export function ReportExportButton({ report }: { report: ReportDocument }) {
         ? "Your authenticated role cannot generate this report."
         : "Unable to download this PDF.");
     } finally { setBusy(false); }
+  };
+  const downloadTabular = async (format: "excel" | "csv") => {
+    setBusy(true);
+    setPreparing(format);
+    setError("");
+    setNotice("");
+    try {
+      if (report.rows.length === 0) throw new Error("No report data available.");
+      await authorize();
+      if (!session) throw new Error("A verified session is required to export reports.");
+      const generatedAt = new Date();
+      const content = format === "excel"
+        ? createReportWorkbookBlob(report, session.user.name, generatedAt)
+        : new Blob([buildReportCsv(report)], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(content);
+      const anchor = document.createElement("a");
+      const role = {
+        faculty: "Faculty",
+        mentor: "Mentor",
+        hod: "HOD",
+        admin: "Admin",
+      }[report.type.split("-")[0]] ?? "Report";
+      const extension = format === "excel" ? "xlsx" : "csv";
+      anchor.href = url;
+      anchor.download = `Lumina_${role}_Report_${generatedAt.toISOString().slice(0, 10)}.${extension}`;
+      document.body.append(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+      setNotice(`${format === "excel" ? "Excel" : "CSV"} report downloaded.`);
+    } catch (cause) {
+      console.error(`${format.toUpperCase()} report export failed.`, cause);
+      const message = cause instanceof Error && cause.message === "No report data available."
+        ? "No report data available."
+        : cause instanceof Error && cause.message.includes("403")
+          ? "Your authenticated role cannot generate this report."
+          : `Unable to generate ${format === "excel" ? "Excel" : "CSV"} report. Please try again.`;
+      setError(message);
+    } finally {
+      setPreparing(null);
+      setBusy(false);
+    }
   };
   const saveReport = async () => {
     setBusy(true);
@@ -121,8 +167,14 @@ export function ReportExportButton({ report }: { report: ReportDocument }) {
   return (
     <>
       <div className="inline-flex flex-wrap items-center gap-2">
-        <button type="button" disabled={!ready || busy} onClick={showPreview} className="inline-flex items-center gap-2 rounded-lg border border-emerald-200/20 bg-emerald-200/[0.07] px-3 py-2 text-xs font-medium text-emerald-100 hover:bg-emerald-200/[0.12] disabled:opacity-50">
-          <FileText className="h-3.5 w-3.5" />{busy ? "Generating PDF..." : "Export PDF"}
+        <button type="button" disabled={!ready || busy || report.rows.length === 0} onClick={() => void showPreview()} className="inline-flex items-center gap-2 rounded-lg border border-emerald-200/20 bg-emerald-200/[0.07] px-3 py-2 text-xs font-medium text-emerald-100 hover:bg-emerald-200/[0.12] disabled:opacity-50">
+          <FileText className="h-3.5 w-3.5" />{preparing === "pdf" ? "Preparing PDF..." : "Export PDF"}
+        </button>
+        <button type="button" disabled={!ready || busy || report.rows.length === 0} onClick={() => void downloadTabular("excel")} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-zinc-300 hover:text-white disabled:opacity-50">
+          <FileSpreadsheet className="h-3.5 w-3.5" />{preparing === "excel" ? "Preparing Excel..." : "Export Excel"}
+        </button>
+        <button type="button" disabled={!ready || busy || report.rows.length === 0} onClick={() => void downloadTabular("csv")} className="inline-flex items-center gap-2 rounded-lg border border-white/10 px-3 py-2 text-xs font-medium text-zinc-300 hover:text-white disabled:opacity-50">
+          <TableProperties className="h-3.5 w-3.5" />{preparing === "csv" ? "Preparing CSV..." : "Export CSV"}
         </button>
         <button type="button" disabled={!ready || busy} onClick={async () => {
           try { await loadHistory(); setHistoryOpen(true); }
@@ -131,7 +183,9 @@ export function ReportExportButton({ report }: { report: ReportDocument }) {
           <History className="h-3.5 w-3.5" />Report history
         </button>
       </div>
+      {report.rows.length === 0 ? <p role="status" className="mt-2 text-xs text-zinc-400">No report data available.</p> : null}
       {error ? <p role="alert" className="mt-2 text-xs text-rose-200">{error}</p> : null}
+      {notice && !pdfUrl ? <p role="status" aria-live="polite" className="mt-2 text-xs text-emerald-200">{notice}</p> : null}
       {pdfUrl ? <div role="dialog" aria-modal="true" aria-label={`${report.title} preview`} className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-3 sm:p-8">
         <section className="flex h-[92vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-white/15 bg-[#101718]">
           <header className="flex items-center justify-between gap-3 border-b border-white/10 p-4">

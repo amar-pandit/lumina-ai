@@ -61,16 +61,61 @@ export function FacultyDashboardPage({ workspace = "Faculty" }: { workspace?: "F
               type: "mentor-dashboard",
               title: "Mentor Academic & Intervention Report",
               period: demoState.term,
-              columns: ["Mentee", "Roll", "Attendance", "Academic Performance", "Risk Score", "Risk Level", "Intervention Status"],
-              rows: reportRoster.map((student) => [student.name, student.rollNo, `${student.attendance}%`, `${student.assessmentAverage}%`, student.risk.toFixed(1), student.status, demoState.interventions.find((item) => item.student === student.name)?.status ?? "Not started"]),
-              summary: [["Mentor Name", session?.user.name ?? "Mentor"], ["Assigned Students", reportRoster.length], ["Average Attendance", `${(reportRoster.reduce((sum, student) => sum + student.attendance, 0) / Math.max(reportRoster.length, 1)).toFixed(1)}%`], ["At-Risk Students", reportRoster.filter((student) => student.status !== "Safe").length], ["Critical Students", reportRoster.filter((student) => student.status === "Critical").length], ["Recovery Progress", `${reportRoster.length ? Math.round((reportRoster.filter((student) => demoState.interventions.some((item) => item.student === student.name && item.status === "Completed")).length / reportRoster.length) * 100) : 0}%`], ["Active Interventions", demoState.interventions.filter((item) => item.status === "Scheduled" && reportRoster.some((student) => student.name === item.student)).length]],
+              reportSheetName: "Assigned Students",
+              summarySheetName: "Mentor Summary",
+              columns: ["Student", "Roll Number", "Attendance %", "Academic Performance %", "Risk Score", "Risk Level", "Recovery Progress", "Intervention Status", "Mentor Action", "Last Updated"],
+              rows: reportRoster.map((student) => {
+                const intervention = demoState.interventions.find((item) => item.student === student.name);
+                const studentTasks = student.id === 1 ? demoState.recoveryTasks : [];
+                const completedCount = student.id === 1 ? demoState.completedRecoveryTaskIds.length : 0;
+                const recoveryProgress = studentTasks.length ? `${Math.round(completedCount / studentTasks.length * 100)}%` : "Not tracked";
+                return [student.name, student.rollNo, `${student.attendance}%`, `${student.assessmentAverage}%`, student.risk, student.status, recoveryProgress, intervention?.status ?? "Not started", intervention?.notes ?? student.courseRisk.recommendations.join("; "), intervention?.date ?? "—"];
+              }),
+              summary: [
+                ["Mentor Name", session.user.name],
+                ["Assigned Students", reportRoster.length],
+                ["Average Attendance", `${(reportRoster.reduce((sum, student) => sum + student.attendance, 0) / Math.max(reportRoster.length, 1)).toFixed(1)}%`],
+                ["At-Risk Students", reportRoster.filter((student) => student.status !== "Safe").length],
+                ["Critical Students", reportRoster.filter((student) => student.status === "Critical").length],
+                ["Recovery Progress", `${reportRoster.length ? Math.round(reportRoster.filter((student) => demoState.interventions.some((item) => item.student === student.name && item.status === "Completed")).length / reportRoster.length * 100) : 0}%`],
+                ["Active Interventions", demoState.interventions.filter((item) => item.status === "Scheduled" && reportRoster.some((student) => student.name === item.student)).length],
+              ],
+              workbookSheets: [
+                {
+                  name: "Risk & Recovery",
+                  columns: ["Student", "Roll Number", "Risk Score", "Risk Level", "Risk Factors", "Recovery Progress", "Recommended Action"],
+                  rows: reportRoster.map((student) => [student.name, student.rollNo, student.risk, student.status, student.riskDrivers.join(", "), student.id === 1 && demoState.recoveryTasks.length ? `${Math.round(demoState.completedRecoveryTaskIds.length / demoState.recoveryTasks.length * 100)}%` : "Not tracked", student.courseRisk.recommendations.join("; ")]),
+                },
+                {
+                  name: "Interventions",
+                  columns: ["Student", "Trigger", "Intervention", "Owner", "Status", "Last Updated"],
+                  rows: demoState.interventions.filter((item) => reportRoster.some((student) => student.name === item.student)).map((item) => [item.student, reportRoster.find((student) => student.name === item.student)?.issue ?? "—", item.type, item.mentor, item.status, item.date]),
+                },
+              ],
             }} /> : <ReportExportButton report={{
               type: "faculty-dashboard",
               title: "Faculty Academic Report",
               period: demoState.term,
-              columns: ["Student", "Roll", "Attendance", "Academic Performance", "Risk Score", "Risk Level", "Intervention Status"],
-              rows: facultyRoster.map((student) => [student.name, student.rollNo, `${student.attendance}%`, `${student.assessmentAverage}%`, student.risk.toFixed(1), student.status, demoState.interventions.find((item) => item.student === student.name)?.status ?? "Not started"]),
+              reportSheetName: "Attendance",
+              summarySheetName: "Faculty Summary",
+              columns: ["Student", "Roll Number", "Course", "Attendance %", "Current Status", "Academic Performance %", "Risk Score", "Risk Level", "Intervention Status"],
+              rows: facultyRoster.map((student) => [student.name, student.rollNo, student.course, `${student.attendance}%`, demoState.attendanceByStudent[student.id] ?? "—", `${student.assessmentAverage}%`, student.risk, student.status, demoState.interventions.find((item) => item.student === student.name)?.status ?? "Not started"]),
               summary: [["Faculty Name", session?.user.name ?? "Faculty"], ["Course", "All assigned courses"], ["Total Students", facultyRoster.length], ["Average Attendance", `${(facultyRoster.reduce((sum, student) => sum + student.attendance, 0) / Math.max(facultyRoster.length, 1)).toFixed(1)}%`], ["Average Academic Performance", `${courseHealth.toFixed(1)}%`], ["Safe Students", safeCount], ["Moderate Students", moderateCount], ["Critical Students", criticalCount], ["Active Interventions", demoState.interventions.filter((item) => item.status === "Scheduled").length]],
+              workbookSheets: [
+                {
+                  name: "Grade Academic",
+                  columns: ["Student", "Roll Number", "Course", "CIA", "Midterm", "Lab", "Assignment", "Academic Performance %"],
+                  rows: facultyRoster.map((student) => {
+                    const grade = demoState.gradebook[student.id];
+                    return [student.name, student.rollNo, student.course, grade.cia, grade.midterm, grade.lab, grade.assignment, `${student.assessmentAverage}%`];
+                  }),
+                },
+                {
+                  name: "Risk",
+                  columns: ["Student", "Roll Number", "Course", "Risk Score", "Risk Level", "Risk Factors", "Recommended Action"],
+                  rows: facultyRoster.map((student) => [student.name, student.rollNo, student.course, student.risk, student.status, student.riskDrivers.join(", "), student.courseRisk.recommendations.join("; ")]),
+                },
+              ],
             }} />}
             <DemoControls />
           </div>
