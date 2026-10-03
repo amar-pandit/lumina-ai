@@ -20,6 +20,18 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## Demo authentication
+
+Demo credentials are verified by the server. Authenticated sessions use a signed, HttpOnly cookie; browser localStorage is not used to grant a role. Configure `LUMINA_AUTH_SECRET` with at least 32 random bytes in production. Development uses a temporary process-local key, so restarting the development server invalidates existing sessions.
+
+## Demo authentication
+
+Email & Password remains available as a fallback. After a successful password login, a user without a face identity can register Face ID. Returning Face ID login opens the webcam and compares three browser-generated face descriptors against encrypted server-side enrollment data; the matched immutable account ID determines the signed, HttpOnly session and role-specific dashboard. HOD and Admin remain distinct roles.
+
+Face detection and recognition run locally in the browser using the MIT-licensed `@vladmandic/face-api` models stored in `public/face-models`. Live images are not uploaded or retained. The three 128-number face descriptors are biometric data: the server encrypts them with AES-256-GCM in `.data/face-identities.json`; `.data/face-encryption.key` is used only for local development. In production, set `LUMINA_AUTH_SECRET` to at least 32 random bytes and use persistent, private server storage for `.data`. The face endpoints require HTTPS in production, and the face identity API never returns stored descriptors.
+
+Face ID captures three live descriptors and performs identity matching with a confidence threshold, rejecting close competing matches. Browser-based face matching cannot reliably distinguish a live person from a photo/video spoof; it is not a certified or spoof-proof biometric authenticator and should not be used as the sole factor for sensitive production accounts without a vetted liveness/anti-spoofing system. Users can always choose Email & Password instead. Demo credentials are defined in `lib/auth/demo-account-credentials.ts`.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:
