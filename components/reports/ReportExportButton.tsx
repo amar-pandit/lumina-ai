@@ -46,7 +46,15 @@ export function ReportExportButton({ report }: { report: ReportDocument }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ reportType: report.type }),
     });
-    if (!response.ok) throw new Error(`Report authorization failed with ${response.status}.`);
+    if (!response.ok) {
+      throw new Error(response.status === 401
+        ? "Please sign in again."
+        : response.status === 403
+          ? "You do not have permission to export this report."
+          : response.status >= 500
+            ? "Report generation failed. Please try again."
+            : `Report authorization failed with ${response.status}.`);
+    }
   };
   const showPreview = async () => {
     setBusy(true);
@@ -57,9 +65,7 @@ export function ReportExportButton({ report }: { report: ReportDocument }) {
       createPreview();
     } catch (cause) {
       console.error("PDF generation failed.", cause);
-      setError(cause instanceof Error && cause.message.includes("403")
-        ? "Your authenticated role cannot generate this report."
-        : "Unable to generate this PDF. Please try again.");
+      setError(cause instanceof Error ? cause.message : "Unable to generate this PDF. Please try again.");
     } finally { setPreparing(null); setBusy(false); }
   };
   const download = async (usePreview = true) => {
@@ -70,9 +76,7 @@ export function ReportExportButton({ report }: { report: ReportDocument }) {
       if (pdf) pdf.save(`Lumina_${safeFilePart(report.title)}_${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (cause) {
       console.error("PDF download failed.", cause);
-      setError(cause instanceof Error && cause.message.includes("403")
-        ? "Your authenticated role cannot generate this report."
-        : "Unable to download this PDF.");
+      setError(cause instanceof Error ? cause.message : "Unable to download this PDF.");
     } finally { setBusy(false); }
   };
   const downloadTabular = async (format: "excel" | "csv") => {
@@ -108,8 +112,8 @@ export function ReportExportButton({ report }: { report: ReportDocument }) {
       console.error(`${format.toUpperCase()} report export failed.`, cause);
       const message = cause instanceof Error && cause.message === "No report data available."
         ? "No report data available."
-        : cause instanceof Error && cause.message.includes("403")
-          ? "Your authenticated role cannot generate this report."
+        : cause instanceof Error
+          ? cause.message
           : `Unable to generate ${format === "excel" ? "Excel" : "CSV"} report. Please try again.`;
       setError(message);
     } finally {

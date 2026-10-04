@@ -61,9 +61,11 @@ function Badge({ children, tone = "neutral" }: { children: React.ReactNode; tone
 
 function useToast() {
   const [message, setMessage] = useState("");
+  const [isError, setIsError] = useState(false);
   const timeout = useRef<number | null>(null);
-  const notify = useCallback((nextMessage: string) => {
+  const notify = useCallback((nextMessage: string, error = false) => {
     setMessage(nextMessage);
+    setIsError(error);
     if (timeout.current !== null) window.clearTimeout(timeout.current);
     timeout.current = window.setTimeout(() => setMessage(""), 2600);
   }, []);
@@ -71,8 +73,8 @@ function useToast() {
     if (timeout.current !== null) window.clearTimeout(timeout.current);
   }, []);
   const Toast = () => message ? (
-    <div role="status" aria-live="polite" className="fixed bottom-5 right-5 z-[90] flex items-center gap-2 rounded-xl border border-emerald-200/20 bg-[#102019] px-4 py-3 text-sm text-emerald-100 shadow-xl">
-      <Check className="h-4 w-4" />{message}
+    <div role={isError ? "alert" : "status"} aria-live={isError ? "assertive" : "polite"} className={`fixed bottom-5 right-5 z-[90] flex items-center gap-2 rounded-xl border px-4 py-3 text-sm shadow-xl ${isError ? "border-rose-200/20 bg-[#241111] text-rose-100" : "border-emerald-200/20 bg-[#102019] text-emerald-100"}`}>
+      {isError ? <X className="h-4 w-4" /> : <Check className="h-4 w-4" />}{message}
     </div>
   ) : null;
   return { notify, Toast };
@@ -539,6 +541,7 @@ export function AdminSettings() {
   const [state, setState] = useDemoState(DEMO_STATE_KEY, INITIAL_DEMO_STATE);
   const [draft, setDraft] = useState<DemoSettings>(() => normalizeDemoSettings(state.settings));
   const [resetOpen, setResetOpen] = useState(false);
+  const [sendingTestEmail, setSendingTestEmail] = useState(false);
   const { notify, Toast } = useToast();
   useEffect(() => {
     startTransition(() => setDraft(normalizeDemoSettings(state.settings)));
@@ -576,6 +579,28 @@ export function AdminSettings() {
     notify("Demo data reset successfully.");
   };
 
+  const sendTestEmail = async () => {
+    setSendingTestEmail(true);
+    try {
+      const response = await fetch("/api/email/test", { method: "POST" });
+      const result = await response.json() as {
+        success?: boolean;
+        recipient?: string;
+        timestamp?: string;
+        errorMessage?: string;
+        error?: string;
+      };
+      if (!response.ok || !result.success) {
+        throw new Error(result.errorMessage ?? result.error ?? "Test email delivery failed.");
+      }
+      notify(`Test email sent to ${result.recipient ?? "Admin"} at ${result.timestamp ?? "now"}.`);
+    } catch (error) {
+      notify(error instanceof Error ? error.message : "Test email delivery failed.", true);
+    } finally {
+      setSendingTestEmail(false);
+    }
+  };
+
   const numberInput = (key: "attendanceMinimum" | "moderateRiskThreshold" | "criticalRiskThreshold" | "escalationSubjects", label: string, min: number, max: number) => (
     <label className="block text-xs text-zinc-400">{label}<input type="number" min={min} max={max} value={draft[key]} onChange={(event) => update(key, Number(event.target.value))} className="mt-1.5 w-full rounded-lg border border-white/10 bg-[#0b1213] px-3 py-2.5 text-white" /></label>
   );
@@ -596,11 +621,16 @@ export function AdminSettings() {
             {([
               ["notifyCriticalRisk", "Notify on critical risk"],
               ["notifyAttendanceRisk", "Notify on low attendance"],
+              ["emailDigestEnabled", "Enable hourly academic digest emails"],
+              ["emailDigestSendOnlyOnChange", "Send digest only on meaningful change"],
+              ["emailDigestCompactSummary", "Send compact summary when idle"],
+              ["immediateCriticalAlertsEnabled", "Enable immediate critical alerts"],
               ["demoMode", "Demo mode enabled"],
             ] as const).map(([key, label]) => <label key={key} className="flex items-center gap-2 rounded-lg border border-white/10 bg-white/[0.02] p-3 text-xs text-zinc-300"><input type="checkbox" checked={draft[key]} onChange={(event) => update(key, event.target.checked)} className="accent-emerald-300" />{label}</label>)}
           </div>
           <div className="mt-6 flex flex-wrap gap-2"><button type="submit" className="rounded-xl bg-emerald-200 px-4 py-2.5 text-xs font-semibold text-[#0b1712]">Save Settings</button><button type="button" onClick={reset} className="rounded-xl border border-white/10 px-4 py-2.5 text-xs text-zinc-300 hover:text-white">Reset Demo Settings</button><button type="button" onClick={() => setResetOpen(true)} className="rounded-xl border border-rose-200/20 px-4 py-2.5 text-xs text-rose-100 hover:bg-rose-200/[0.06]">Reset Demo Data</button></div>
         </form>
+        {process.env.NODE_ENV !== "production" ? <section className={panel}><h2 className="font-semibold text-white">Email delivery test</h2><p className="mt-1 text-xs text-zinc-500">Sends a test email to the configured Admin address. Available in development only.</p><button type="button" disabled={sendingTestEmail} onClick={() => void sendTestEmail()} className="mt-4 rounded-xl border border-emerald-200/20 bg-emerald-200/[0.06] px-4 py-2.5 text-xs font-semibold text-emerald-100 disabled:opacity-50">{sendingTestEmail ? "Sending..." : "Send Test Email"}</button></section> : null}
         <section className={panel}><h2 className="font-semibold text-white">Risk weights</h2><p className="mt-1 text-xs text-zinc-500">Weights remain centrally configured to avoid conflicting per-page risk formulas.</p><div className="mt-4 grid gap-2 sm:grid-cols-5">{[["Attendance", draft.attendanceWeight], ["Assessment", draft.assessmentWeight], ["Assignment", draft.assignmentWeight], ["Lab", draft.labWeight], ["Velocity", draft.velocityWeight]].map(([label, weight]) => <Metric key={String(label)} label={String(label)} value={`${weight}%`} />)}</div></section>
       </main>
       {resetOpen ? <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm"><section role="dialog" aria-modal="true" aria-labelledby="reset-demo-title" className="w-full max-w-md rounded-2xl border border-white/10 bg-[#111a1b] p-5 shadow-2xl"><h2 id="reset-demo-title" className="text-lg font-semibold text-white">Reset all demo data?</h2><p className="mt-2 text-sm leading-6 text-zinc-400">This restores the original student, attendance, grade, recovery, intervention, escalation, parent gateway, notification, and settings data in this browser.</p><div className="mt-5 flex justify-end gap-2"><button type="button" onClick={() => setResetOpen(false)} className="rounded-xl border border-white/10 px-4 py-2.5 text-xs text-zinc-300 hover:text-white">Cancel</button><button type="button" onClick={resetAllDemoData} className="rounded-xl bg-rose-200 px-4 py-2.5 text-xs font-semibold text-[#241111]">Reset Demo Data</button></div></section></div> : null}

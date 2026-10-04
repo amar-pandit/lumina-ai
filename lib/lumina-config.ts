@@ -1,10 +1,20 @@
 import type { RiskThresholds, RiskWeights } from "@/lib/risk-engine";
 
+export interface AcademicEmailConfiguration {
+  enabled: boolean;
+  digestIntervalMinutes: number;
+  sendOnlyOnChange: boolean;
+  compactSummaryWhenIdle: boolean;
+  immediateAlertsEnabled: boolean;
+  maxRetryAttempts: number;
+}
+
 export interface LuminaConfiguration {
   risk: RiskThresholds;
   riskWeights: RiskWeights;
   institutionName: string;
   demoMode: boolean;
+  email: AcademicEmailConfiguration;
 }
 
 export const DEFAULT_LUMINA_CONFIG: LuminaConfiguration = {
@@ -22,4 +32,12 @@ export const DEFAULT_LUMINA_CONFIG: LuminaConfiguration = {
   },
   institutionName: "Lumina Institute",
   demoMode: true,
+  email: {
+    enabled: true,
+    digestIntervalMinutes: 60,
+    sendOnlyOnChange: true,
+    compactSummaryWhenIdle: true,
+    immediateAlertsEnabled: true,
+    maxRetryAttempts: 3,
+  },
 };

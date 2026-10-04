@@ -97,8 +97,12 @@ function Pill({ children, tone = "neutral" }: { children: React.ReactNode; tone?
 export function FacultyTools({ tool }: { tool: FacultyToolKind }) {
   const [demoState, setDemoState] = useDemoState(DEMO_STATE_KEY, INITIAL_DEMO_STATE);
   const { session } = useDemoSession();
+  const [selectedAttendanceCourse, setSelectedAttendanceCourse] = useState("Data Structures");
+  const availableAttendanceCourses = [...new Set(facultyStudents.map((student) => student.course))];
   const committedRows = demoState.committedVoiceRows;
-  const attendance = demoState.attendanceByStudent;
+  const attendance = tool === "grid"
+    ? demoState.attendanceByCourse[selectedAttendanceCourse] ?? demoState.attendanceByStudent
+    : demoState.attendanceByStudent;
   const grades = demoState.gradebook;
   const assignedGroups = demoState.remedialAssignments;
   const interventions = demoState.interventions;
@@ -118,6 +122,13 @@ export function FacultyTools({ tool }: { tool: FacultyToolKind }) {
   const [attendanceQuery, setAttendanceQuery] = useState("");
   const [attendanceFilter, setAttendanceFilter] = useState("All");
   const [attendanceSaved, setAttendanceSaved] = useState(false);
+  const [attendanceNotificationSending, setAttendanceNotificationSending] = useState(false);
+  const [attendanceEmailLog, setAttendanceEmailLog] = useState<Array<{
+    recipient: string;
+    status: string;
+    timestamp: string;
+    errorMessage?: string;
+  }>>([]);
   const [normalization, setNormalization] = useState(0);
   const [gradeSaved, setGradeSaved] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
@@ -130,15 +141,28 @@ export function FacultyTools({ tool }: { tool: FacultyToolKind }) {
     window.setTimeout(() => setNotice(""), 2400);
   }, []);
 
-  const updateAttendance = useCallback((update: (previous: Record<number, AttendanceStatus>) => Record<number, AttendanceStatus>) => {
+  const updateAttendance = useCallback((
+    update: (previous: Record<number, AttendanceStatus>) => Record<number, AttendanceStatus>,
+    course?: string,
+  ) => {
     setDemoState((previous) => {
-      const attendanceByStudent = update(previous.attendanceByStudent);
-      const previousAttending = countsAsAttending(previous.attendanceByStudent[1]);
-      const nextAttending = countsAsAttending(attendanceByStudent[1]);
+      const previousAttendance = course
+        ? previous.attendanceByCourse[course] ?? previous.attendanceByStudent
+        : previous.attendanceByStudent;
+      const nextAttendance = update(previousAttendance);
+      const attendanceByStudent = course === "Data Structures" || !course
+        ? nextAttendance
+        : previous.attendanceByStudent;
+      const attendanceByCourse = course
+        ? { ...previous.attendanceByCourse, [course]: nextAttendance }
+        : previous.attendanceByCourse;
+      const previousAttending = countsAsAttending(previousAttendance[1]);
+      const nextAttending = countsAsAttending(nextAttendance[1]);
       const attendanceChange = Number(nextAttending) - Number(previousAttending);
       return {
         ...previous,
         attendanceByStudent,
+        attendanceByCourse,
         attendanceSimulator: {
           ...previous.attendanceSimulator,
           classesAttended: Math.max(0, Math.min(
@@ -152,13 +176,16 @@ export function FacultyTools({ tool }: { tool: FacultyToolKind }) {
   }, [setDemoState]);
 
   const voiceResult = useMemo(() => parseVoiceCommand(transcript), [transcript]);
-  const filteredAttendance = roster.filter((student) =>
+  const courseRoster = roster.filter((student) => student.course === selectedAttendanceCourse);
+  const gridRoster = tool === "grid" ? courseRoster : roster;
+  const filteredAttendance = gridRoster.filter((student) =>
     `${student.name} ${student.rollNo}`.toLowerCase().includes(attendanceQuery.toLowerCase())
     && (attendanceFilter === "All" || attendance[student.id] === attendanceFilter),
   );
-  const attendancePercent = Math.round(roster.reduce((total, student) => total + student.attendance, 0) / roster.length);
+  const attendancePercent = Math.round(courseRoster.reduce((total, student) => total + student.attendance, 0) / Math.max(courseRoster.length, 1));
   const reportRoster = roster.filter((student) => (
-    session?.role === "HOD" ? student.department === HOD_DEPARTMENT
+    (tool === "grid" || tool === "gradebook") && session?.role === "FACULTY" ? student.course === selectedAttendanceCourse
+      : session?.role === "HOD" ? student.department === HOD_DEPARTMENT
       : session?.role === "MENTOR" ? student.mentor === session.user.name
         : true
   ));
@@ -431,20 +458,89 @@ export function FacultyTools({ tool }: { tool: FacultyToolKind }) {
       const selectVisible = () => setSelectedRows((previous) => previous.size === filteredAttendance.length ? new Set() : new Set(filteredAttendance.map((student) => student.id)));
       const batchSet = (status: AttendanceStatus) => {
         if (selectedRows.size === 0) return;
-        updateAttendance((previous) => Object.fromEntries(Object.entries(previous).map(([id, value]) => [Number(id), selectedRows.has(Number(id)) ? status : value])));
+        updateAttendance(
+          (previous) => Object.fromEntries(Object.entries(previous).map(([id, value]) => [Number(id), selectedRows.has(Number(id)) ? status : value])),
+          selectedAttendanceCourse,
+        );
       };
-      const saveAttendance = () => { setAttendanceSaved(true); notify("Attendance changes saved to the local demo register."); };
+      const saveAttendance = async () => {
+        setAttendanceSaved(true);
+        notify("Attendance changes saved to the local demo register.");
+        if (process.env.NODE_ENV === "production" || attendanceNotificationSending) return;
+
+        setAttendanceNotificationSending(true);
+        const attendanceSnapshot = roster.map((student) => ({
+          studentId: student.id,
+          course: student.course,
+          status: demoState.attendanceByCourse[student.course]?.[student.id]
+            ?? (student.course === selectedAttendanceCourse ? attendance[student.id] : undefined)
+            ?? demoState.attendanceByStudent[student.id]
+            ?? "Absent",
+        }));
+        const parentFollowUpStudentIds = [...new Set([
+          ...Object.entries(demoState.parentContactRecords)
+            .filter(([, record]) => record.status === "Pending")
+            .map(([id]) => Number(id)),
+          ...demoState.dispatchedParentIds.filter((id) =>
+            demoState.parentContactRecords[id]?.status !== "Sent"),
+        ])];
+
+        try {
+          const response = await fetch("/api/email/demo-attendance", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              course: selectedAttendanceCourse,
+              attendance: attendanceSnapshot,
+              leadership: {
+                studentMetrics: roster.map((student) => ({
+                  studentId: student.id,
+                  assessmentAverage: student.assessmentAverage,
+                  riskCategory: student.status,
+                })),
+                interventions: demoState.interventions.map(({ student, status }) => ({ student, status })),
+                escalatedStudentIds: demoState.escalatedStudentIds,
+                parentFollowUpStudentIds,
+              },
+            }),
+          });
+          const result = await response.json() as {
+            deliveries?: Array<{ recipient: string; status: string; timestamp: string; errorMessage?: string }>;
+            errorMessage?: string;
+          };
+          if (result.deliveries) {
+            setAttendanceEmailLog(result.deliveries);
+          } else {
+            setAttendanceEmailLog([{
+              recipient: "Unavailable",
+              status: "FAILED",
+              timestamp: new Date().toISOString(),
+              ...(result.errorMessage ? { errorMessage: result.errorMessage } : {}),
+            }]);
+          }
+        } catch (error) {
+          const timestamp = new Date().toISOString();
+          setAttendanceEmailLog([{
+            recipient: "Unavailable",
+            status: "FAILED",
+            timestamp,
+            errorMessage: error instanceof Error ? error.message : "Could not reach the email service.",
+          }]);
+        } finally {
+          setAttendanceNotificationSending(false);
+        }
+      };
       return <>
-        <div className="grid gap-3 sm:grid-cols-3"><div className={panel}><p className="text-xs text-zinc-500">Roster size</p><p className="mt-2 text-2xl font-semibold text-white">{roster.length}</p></div><div className={panel}><p className="text-xs text-zinc-500">Attendance rate</p><p className="mt-2 text-2xl font-semibold text-white">{attendancePercent}%</p></div><div className={panel}><p className="text-xs text-zinc-500">Selected</p><p className="mt-2 text-2xl font-semibold text-white">{selectedRows.size}</p></div></div>
-        <section className={panel}><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-white">Data Structures · Roll register</h2><p className="mt-1 text-xs text-zinc-500">Keyboard shortcuts: P present · A absent · O on duty</p></div><button type="button" onClick={saveAttendance} className="inline-flex items-center gap-2 rounded-xl bg-emerald-200 px-4 py-2.5 text-xs font-semibold text-[#0b1712]"><Save className="h-4 w-4" />{attendanceSaved ? "Saved" : "Save changes"}</button></div><div className="mt-4 flex flex-wrap gap-2"><label className="relative min-w-52 flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" /><input value={attendanceQuery} onChange={(event) => setAttendanceQuery(event.target.value)} placeholder="Search student or roll" className="w-full rounded-xl border border-white/10 bg-[#0b1213] py-2.5 pl-9 pr-3 text-xs text-white outline-none" /></label><select value={attendanceFilter} onChange={(event) => setAttendanceFilter(event.target.value)} aria-label="Filter attendance status" className="rounded-xl border border-white/10 bg-[#0b1213] px-3 py-2.5 text-xs text-zinc-300"><option>All</option>{attendanceStatuses.map((status) => <option key={status}>{status}</option>)}</select><button type="button" onClick={selectVisible} className="rounded-xl border border-white/10 px-3 py-2.5 text-xs text-zinc-300">{selectedRows.size === filteredAttendance.length ? "Clear selection" : "Select visible"}</button></div><div className="mt-3 flex flex-wrap gap-2">{attendanceStatuses.map((status) => <button key={status} type="button" disabled={selectedRows.size === 0} onClick={() => batchSet(status)} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] text-zinc-300 disabled:opacity-40">Set selected: {status}</button>)}</div><div className="mt-4 overflow-x-auto"><table className="min-w-[680px] w-full text-left text-xs"><thead><tr className="border-b border-white/10 text-zinc-500"><th className="w-10 py-3"><input type="checkbox" aria-label="Select visible students" checked={filteredAttendance.length > 0 && filteredAttendance.every((student) => selectedRows.has(student.id))} onChange={selectVisible} /></th><th className="py-3">Student</th><th className="py-3">Roll</th><th className="py-3">Attendance</th><th className="py-3">Status</th></tr></thead><tbody>{filteredAttendance.map((student) => <tr key={student.id} onFocusCapture={() => setActiveRow(student.id)} className="border-b border-white/[0.06] text-zinc-300"><td className="py-2.5"><input type="checkbox" aria-label={`Select ${student.name}`} checked={selectedRows.has(student.id)} onChange={() => toggleSelected(student.id)} /></td><td className="py-2.5 font-medium text-white">{student.name}</td><td className="py-2.5 font-mono text-zinc-500">{student.rollNo}</td><td className="py-2.5">{student.attendance}%</td><td className="py-2.5"><select aria-label={`${student.name} attendance status`} value={attendance[student.id]} onChange={(event) => updateAttendance((previous) => ({ ...previous, [student.id]: event.target.value as AttendanceStatus }))} className="rounded-lg border border-white/10 bg-[#0b1213] px-2 py-1.5 text-xs text-zinc-200">{attendanceStatuses.map((status) => <option key={status}>{status}</option>)}</select></td></tr>)}</tbody></table>{filteredAttendance.length === 0 ? <p className="py-7 text-center text-sm text-zinc-500">No students match your search.</p> : null}</div></section>
+        <div className="grid gap-3 sm:grid-cols-3"><div className={panel}><p className="text-xs text-zinc-500">Roster size · {selectedAttendanceCourse}</p><p className="mt-2 text-2xl font-semibold text-white">{courseRoster.length}</p></div><div className={panel}><p className="text-xs text-zinc-500">Attendance rate</p><p className="mt-2 text-2xl font-semibold text-white">{attendancePercent}%</p></div><div className={panel}><p className="text-xs text-zinc-500">Selected</p><p className="mt-2 text-2xl font-semibold text-white">{selectedRows.size}</p></div></div>
+        <section className={panel}><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-white">{selectedAttendanceCourse} · Roll register</h2><p className="mt-1 text-xs text-zinc-500">Keyboard shortcuts: P present · A absent · O on duty</p></div><div className="flex flex-wrap items-center gap-2"><label className="sr-only" htmlFor="assigned-attendance-course">Assigned course</label><select id="assigned-attendance-course" aria-label="Assigned course" value={selectedAttendanceCourse} onChange={(event) => { setSelectedAttendanceCourse(event.target.value); setSelectedRows(new Set()); setAttendanceSaved(false); setAttendanceEmailLog([]); }} className="rounded-xl border border-white/10 bg-[#0b1213] px-3 py-2.5 text-xs text-zinc-200">{(session?.role === "FACULTY" ? availableAttendanceCourses : [])?.map((course) => <option key={course}>{course}</option>)}</select><button type="button" onClick={saveAttendance} disabled={attendanceNotificationSending} className="inline-flex items-center gap-2 rounded-xl bg-emerald-200 px-4 py-2.5 text-xs font-semibold text-[#0b1712] disabled:cursor-wait disabled:opacity-60"><Save className="h-4 w-4" />{attendanceNotificationSending ? "Sending demo email…" : attendanceSaved ? "Saved" : "Save changes"}</button></div></div>{process.env.NODE_ENV !== "production" && attendanceEmailLog.length > 0 ? <div role="status" className="mt-3 rounded-xl border border-white/10 bg-white/[0.025] p-3"><p className="text-xs font-semibold text-zinc-200">Email notification triggered</p><div className="mt-2 space-y-2">{attendanceEmailLog.map((entry, index) => <div key={`${entry.recipient}-${index}`} className="text-[10px] text-zinc-400"><p>Recipient: {entry.recipient} · Status: {entry.status} · Timestamp: {entry.timestamp}</p>{entry.errorMessage ? <p className="mt-1 text-rose-200">{entry.errorMessage}</p> : null}</div>)}</div></div> : null}<div className="mt-4 flex flex-wrap gap-2"><label className="relative min-w-52 flex-1"><Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" /><input value={attendanceQuery} onChange={(event) => setAttendanceQuery(event.target.value)} placeholder="Search student or roll" className="w-full rounded-xl border border-white/10 bg-[#0b1213] py-2.5 pl-9 pr-3 text-xs text-white outline-none" /></label><select value={attendanceFilter} onChange={(event) => setAttendanceFilter(event.target.value)} aria-label="Filter attendance status" className="rounded-xl border border-white/10 bg-[#0b1213] px-3 py-2.5 text-xs text-zinc-300"><option>All</option>{attendanceStatuses.map((status) => <option key={status}>{status}</option>)}</select><button type="button" onClick={selectVisible} className="rounded-xl border border-white/10 px-3 py-2.5 text-xs text-zinc-300">{selectedRows.size === filteredAttendance.length ? "Clear selection" : "Select visible"}</button></div><div className="mt-3 flex flex-wrap gap-2">{attendanceStatuses.map((status) => <button key={status} type="button" disabled={selectedRows.size === 0} onClick={() => batchSet(status)} className="rounded-lg border border-white/10 px-2.5 py-1.5 text-[10px] text-zinc-300 disabled:opacity-40">Set selected: {status}</button>)}</div><div className="mt-4 overflow-x-auto"><table className="min-w-[680px] w-full text-left text-xs"><thead><tr className="border-b border-white/10 text-zinc-500"><th className="w-10 py-3"><input type="checkbox" aria-label="Select visible students" checked={filteredAttendance.length > 0 && filteredAttendance.every((student) => selectedRows.has(student.id))} onChange={selectVisible} /></th><th className="py-3">Student</th><th className="py-3">Roll</th><th className="py-3">Attendance</th><th className="py-3">Status</th></tr></thead><tbody>{filteredAttendance.map((student) => <tr key={student.id} onFocusCapture={() => setActiveRow(student.id)} className="border-b border-white/[0.06] text-zinc-300"><td className="py-2.5"><input type="checkbox" aria-label={`Select ${student.name}`} checked={selectedRows.has(student.id)} onChange={() => toggleSelected(student.id)} /></td><td className="py-2.5 font-medium text-white">{student.name}</td><td className="py-2.5 font-mono text-zinc-500">{student.rollNo}</td><td className="py-2.5">{student.attendance}%</td><td className="py-2.5"><select aria-label={`${student.name} attendance status`} value={attendance[student.id] ?? "Absent"} onChange={(event) => updateAttendance((previous) => ({ ...previous, [student.id]: event.target.value as AttendanceStatus }), selectedAttendanceCourse)} className="rounded-lg border border-white/10 bg-[#0b1213] px-2 py-1.5 text-xs text-zinc-200">{attendanceStatuses.map((status) => <option key={status}>{status}</option>)}</select></td></tr>)}</tbody></table>{filteredAttendance.length === 0 ? <p className="py-7 text-center text-sm text-zinc-500">No students match your search.</p> : null}</div></section>
       </>;
     }
 
     if (tool === "gradebook") {
-      const students = roster.slice(0, 16);
+      const students = courseRoster;
       const scoreFor = (record: GradeRecord) => record.cia * 0.3 + record.midterm * 0.3 + record.lab * 0.25 + record.assignment * 0.15;
       return <>
-        <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-zinc-400">Database Systems · 16 of {roster.length} students</p><button type="button" onClick={() => { setGradeSaved(true); notify("Gradebook saved to the local demo register."); }} className="inline-flex items-center gap-2 rounded-xl bg-emerald-200 px-4 py-2.5 text-xs font-semibold text-[#0b1712]"><Save className="h-4 w-4" />{gradeSaved ? "Saved" : "Save gradebook"}</button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-zinc-400">{selectedAttendanceCourse} · {students.length} assigned students</p><div className="flex items-center gap-2"><label className="sr-only" htmlFor="assigned-gradebook-course">Assigned course</label><select id="assigned-gradebook-course" aria-label="Gradebook assigned course" value={selectedAttendanceCourse} onChange={(event) => { setSelectedAttendanceCourse(event.target.value); setGradeSaved(false); }} className="rounded-xl border border-white/10 bg-[#0b1213] px-3 py-2.5 text-xs text-zinc-200">{(session?.role === "FACULTY" ? availableAttendanceCourses : []).map((course) => <option key={course}>{course}</option>)}</select><button type="button" onClick={() => { setGradeSaved(true); notify("Gradebook saved to the local demo register."); }} className="inline-flex items-center gap-2 rounded-xl bg-emerald-200 px-4 py-2.5 text-xs font-semibold text-[#0b1712]"><Save className="h-4 w-4" />{gradeSaved ? "Saved" : "Save gradebook"}</button></div></div>
         <section className={panel}><div className="mb-4 flex flex-wrap items-center justify-between gap-3"><div><h2 className="font-semibold text-white">Assessment editor</h2><p className="mt-1 text-xs text-zinc-500">Each component is entered as a percentage of its maximum marks.</p></div><label className="flex items-center gap-3 text-xs text-zinc-400">Normalization preview <input type="range" min={-10} max={10} value={normalization} onChange={(event) => { setNormalization(Number(event.target.value)); setGradeSaved(false); }} /><span className="w-10 text-right text-white">{normalization > 0 ? "+" : ""}{normalization}%</span></label></div><div className="overflow-x-auto"><table className="min-w-[940px] w-full text-left text-xs"><thead><tr className="border-b border-white/10 text-zinc-500"><th className="py-3 pr-3">Student</th><th className="py-3 px-2">CIA /30%</th><th className="py-3 px-2">Midterm /30%</th><th className="py-3 px-2">Lab /25%</th><th className="py-3 px-2">Assignment /15%</th><th className="py-3 px-2">Total</th><th className="py-3 px-2">Normalized</th><th className="py-3">Risk</th></tr></thead><tbody>{students.map((student) => { const record = grades[student.id]; const total = scoreFor(record); const adjusted = Math.max(0, Math.min(100, total + normalization)); const risk = calculateRisk({ attendance: student.attendance, assessmentAverage: total, academicVelocity: student.velocity, assignmentPerformance: record.assignment, labCompletion: record.lab }); const inputFor = (key: keyof GradeRecord, label: string) => <input aria-label={`${student.name} ${label} score`} type="number" min={0} max={100} value={record[key]} onChange={(event) => updateGrade(student.id, key, Number(event.target.value))} className="w-16 rounded-lg border border-white/10 bg-[#0b1213] px-2 py-1.5 text-center text-xs text-white" />; return <tr key={student.id} className="border-b border-white/[0.06] text-zinc-300"><td className="py-2.5 pr-3"><span className="font-medium text-white">{student.name}</span><span className="ml-2 font-mono text-zinc-600">{student.rollNo}</span></td><td className="px-2">{inputFor("cia", "CIA")}</td><td className="px-2">{inputFor("midterm", "midterm")}</td><td className="px-2">{inputFor("lab", "lab")}</td><td className="px-2">{inputFor("assignment", "assignment")}</td><td className="px-2 font-semibold text-white">{total.toFixed(1)}%</td><td className="px-2 text-emerald-100">{adjusted.toFixed(1)}%</td><td><Pill tone={risk.category === "CRITICAL" ? "bad" : risk.category === "MODERATE" ? "warn" : "good"}>{risk.category}</Pill></td></tr>; })}</tbody></table></div><p className="mt-4 text-[11px] text-zinc-500">Normalization preview is illustrative and does not alter source marks until saved.</p></section>
       </>;
     }

@@ -1,0 +1,531 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum RoleName {
+  STUDENT
+  FACULTY
+  MENTOR
+  HOD
+  ADMIN
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  ON_DUTY
+  MEDICAL_LEAVE
+  OTHER_APPROVED_LEAVE
+  NOT_MARKED
+}
+
+enum ExamStatus {
+  APPEARED
+  ABSENT
+  MEDICAL_LEAVE
+  ON_DUTY
+  PENDING
+  EXEMPTED
+}
+
+enum RiskCategory {
+  SAFE
+  MODERATE
+  CRITICAL
+}
+
+enum InterventionStatus {
+  SCHEDULED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+  ESCALATED
+}
+
+enum FollowUpStatus {
+  PENDING
+  CONTACTED
+  ACKNOWLEDGED
+  ESCALATED
+  CLOSED
+}
+
+enum NotificationEventType {
+  CRITICAL_RISK_CREATED
+  EXAM_ABSENCE
+  ATTENDANCE_THRESHOLD
+  INTERVENTION_ESCALATION
+  PARENT_FOLLOWUP_REQUIRED
+  HOURLY_DIGEST
+  OTHER
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum EmailKind {
+  TEST
+  DIGEST
+  ALERT
+}
+
+model Role {
+  id        String     @id @default(cuid())
+  name      RoleName   @unique
+  users     UserRole[]
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
+}
+
+model User {
+  id                  String              @id
+  email               String              @unique
+  name                String
+  isActive            Boolean             @default(true)
+  isDemo              Boolean             @default(false)
+  roles               UserRole[]
+  studentProfile      Student?            @relation("StudentAuth")
+  facultyProfile      Faculty?            @relation("FacultyAuth")
+  mentorProfile       Mentor?             @relation("MentorAuth")
+  headedDepartment    Department?         @relation("DepartmentHead")
+  attendanceMarked    AttendanceSession[] @relation("AttendanceMarker")
+  examsCreated        Exam[]              @relation("ExamCreator")
+  interventionsMade   Intervention[]      @relation("InterventionCreator")
+  notificationEvents  NotificationEvent[] @relation("NotificationActor")
+  notificationTargets NotificationEvent[] @relation("NotificationUserTarget")
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+}
+
+model UserRole {
+  userId    String
+  roleId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      Role     @relation(fields: [roleId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now())
+
+  @@id([userId, roleId])
+  @@index([roleId, userId])
+}
+
+model Department {
+  id                 String              @id @default(cuid())
+  code               String              @unique
+  name               String              @unique
+  headUserId         String?             @unique
+  head               User?               @relation("DepartmentHead", fields: [headUserId], references: [id], onDelete: SetNull)
+  students           Student[]
+  faculty            Faculty[]
+  mentors            Mentor[]
+  courses            Course[]
+  classes            ClassGroup[]
+  exams              Exam[]
+  notificationEvents NotificationEvent[]
+  isDemo             Boolean             @default(false)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+}
+
+model Faculty {
+  id           String          @id @default(cuid())
+  userId       String?         @unique
+  user         User?           @relation("FacultyAuth", fields: [userId], references: [id], onDelete: SetNull)
+  displayName  String
+  departmentId String?
+  department   Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  courses      FacultyCourse[]
+  isDemo       Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  @@index([departmentId])
+}
+
+model Mentor {
+  id           String             @id @default(cuid())
+  userId       String?            @unique
+  user         User?              @relation("MentorAuth", fields: [userId], references: [id], onDelete: SetNull)
+  displayName  String
+  departmentId String?
+  department   Department?        @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  assignments  MentorAssignment[]
+  isDemo       Boolean            @default(false)
+  createdAt    DateTime           @default(now())
+  updatedAt    DateTime           @updatedAt
+
+  @@index([departmentId])
+}
+
+model ClassGroup {
+  id                String              @id @default(cuid())
+  name              String
+  year              Int?
+  departmentId      String
+  department        Department          @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  students          Student[]
+  enrollments       Enrollment[]
+  sessions          AttendanceSession[]
+  mentorAssignments MentorAssignment[]
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  @@unique([departmentId, name])
+  @@index([departmentId, year])
+}
+
+model Student {
+  id                 String              @id @default(cuid())
+  externalId         String?             @unique
+  authUserId         String?             @unique
+  authUser           User?               @relation("StudentAuth", fields: [authUserId], references: [id], onDelete: SetNull)
+  name               String
+  rollNumber         String              @unique
+  year               Int
+  academicVelocity   Float               @default(0)
+  requiredAttendance Float               @default(75)
+  departmentId       String
+  department         Department          @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  classGroupId       String?
+  classGroup         ClassGroup?         @relation(fields: [classGroupId], references: [id], onDelete: SetNull)
+  enrollments        Enrollment[]
+  attendanceBaseline AttendanceBaseline?
+  attendance         AttendanceRecord[]
+  examParticipation  ExamParticipation[]
+  grades             Grade[]
+  riskSnapshots      RiskSnapshot[]
+  interventions      Intervention[]
+  parentFollowUps    ParentFollowUp[]
+  mentorAssignments  MentorAssignment[]
+  notificationEvents NotificationEvent[]
+  isDemo             Boolean             @default(false)
+  createdAt          DateTime            @default(now())
+  updatedAt          DateTime            @updatedAt
+
+  @@index([departmentId, year])
+  @@index([classGroupId])
+}
+
+model MentorAssignment {
+  id           String      @id @default(cuid())
+  mentorId     String
+  mentor       Mentor      @relation(fields: [mentorId], references: [id], onDelete: Cascade)
+  studentId    String
+  student      Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  classGroupId String?
+  classGroup   ClassGroup? @relation(fields: [classGroupId], references: [id], onDelete: SetNull)
+  startsAt     DateTime    @default(now())
+  endsAt       DateTime?
+  isActive     Boolean     @default(true)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([mentorId, studentId, startsAt])
+  @@index([mentorId, isActive, endsAt])
+  @@index([studentId, isActive])
+}
+
+model Course {
+  id           String              @id @default(cuid())
+  code         String              @unique
+  name         String
+  departmentId String?
+  department   Department?         @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  enrollments  Enrollment[]
+  faculty      FacultyCourse[]
+  sessions     AttendanceSession[]
+  exams        Exam[]
+  grades       Grade[]
+  isDemo       Boolean             @default(false)
+  createdAt    DateTime            @default(now())
+  updatedAt    DateTime            @updatedAt
+
+  @@index([departmentId, name])
+}
+
+model FacultyCourse {
+  facultyId String
+  courseId  String
+  term      String
+  faculty   Faculty  @relation(fields: [facultyId], references: [id], onDelete: Cascade)
+  course    Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([facultyId, courseId, term])
+  @@index([courseId, term])
+}
+
+model Enrollment {
+  id           String      @id @default(cuid())
+  studentId    String
+  courseId     String
+  classGroupId String?
+  term         String
+  student      Student     @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course       Course      @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classGroup   ClassGroup? @relation(fields: [classGroupId], references: [id], onDelete: SetNull)
+  isActive     Boolean     @default(true)
+  isDemo       Boolean     @default(false)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@unique([studentId, courseId, term])
+  @@index([courseId, term, isActive])
+  @@index([classGroupId, term])
+}
+
+model AttendanceSession {
+  id             String             @id @default(cuid())
+  courseId       String
+  classGroupId   String
+  sessionDate    DateTime
+  label          String?
+  markedByUserId String?
+  course         Course             @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  classGroup     ClassGroup         @relation(fields: [classGroupId], references: [id], onDelete: Restrict)
+  markedBy       User?              @relation("AttendanceMarker", fields: [markedByUserId], references: [id], onDelete: SetNull)
+  records        AttendanceRecord[]
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@unique([courseId, classGroupId, sessionDate])
+  @@index([courseId, sessionDate])
+  @@index([classGroupId, sessionDate])
+}
+
+model AttendanceRecord {
+  id         String            @id @default(cuid())
+  sessionId  String
+  studentId  String
+  status     AttendanceStatus  @default(NOT_MARKED)
+  note       String?
+  recordedAt DateTime          @default(now())
+  session    AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student    Student           @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  isDemo     Boolean           @default(false)
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+
+  @@unique([sessionId, studentId])
+  @@index([studentId, recordedAt])
+  @@index([status, recordedAt])
+}
+
+model AttendanceBaseline {
+  id              String   @id @default(cuid())
+  studentId       String   @unique
+  totalClasses    Int
+  attendedClasses Int
+  importedAt      DateTime @default(now())
+  source          String   @default("CONTROLLED_DEMO_SEED")
+  student         Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  isDemo          Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+
+model Exam {
+  id             String              @id @default(cuid())
+  code           String              @unique
+  name           String
+  departmentId   String
+  courseId       String?
+  scheduledAt    DateTime
+  department     Department          @relation(fields: [departmentId], references: [id], onDelete: Restrict)
+  course         Course?             @relation(fields: [courseId], references: [id], onDelete: SetNull)
+  createdById    String?
+  createdBy      User?               @relation("ExamCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  participations ExamParticipation[]
+  isDemo         Boolean             @default(false)
+  createdAt      DateTime            @default(now())
+  updatedAt      DateTime            @updatedAt
+
+  @@index([departmentId, scheduledAt])
+}
+
+model ExamParticipation {
+  id         String     @id @default(cuid())
+  examId     String
+  studentId  String
+  status     ExamStatus @default(PENDING)
+  note       String?
+  recordedAt DateTime   @default(now())
+  exam       Exam       @relation(fields: [examId], references: [id], onDelete: Cascade)
+  student    Student    @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  isDemo     Boolean    @default(false)
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  @@unique([examId, studentId])
+  @@index([studentId, recordedAt])
+  @@index([status, recordedAt])
+}
+
+model Grade {
+  id         String   @id @default(cuid())
+  studentId  String
+  courseId   String
+  term       String
+  cia        Float
+  midterm    Float
+  lab        Float
+  assignment Float
+  recordedAt DateTime @default(now())
+  student    Student  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  course     Course   @relation(fields: [courseId], references: [id], onDelete: Restrict)
+  isDemo     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([studentId, courseId, term])
+  @@index([courseId, term])
+}
+
+model RiskSnapshot {
+  id              String       @id @default(cuid())
+  studentId       String
+  calculatedAt    DateTime     @default(now())
+  score           Float
+  category        RiskCategory
+  attendance      Float
+  assessment      Float
+  velocity        Float
+  assignment      Float
+  labCompletion   Float
+  factors         Json
+  recommendations Json
+  engineVersion   String       @default("1")
+  inputHash       String
+  student         Student      @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  isDemo          Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([studentId, inputHash])
+  @@index([studentId, calculatedAt])
+  @@index([category, calculatedAt])
+}
+
+model Intervention {
+  id              String             @id @default(cuid())
+  studentId       String
+  createdById     String?
+  title           String
+  notes           String             @default("")
+  scheduledAt     DateTime?
+  dueAt           DateTime?
+  completedAt     DateTime?
+  status          InterventionStatus @default(SCHEDULED)
+  escalationLevel Int                @default(0)
+  student         Student            @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  createdBy       User?              @relation("InterventionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  isDemo          Boolean            @default(false)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+
+  @@index([studentId, status, dueAt])
+  @@index([status, dueAt])
+}
+
+model ParentFollowUp {
+  id             String         @id @default(cuid())
+  studentId      String
+  reason         String
+  status         FollowUpStatus @default(PENDING)
+  urgent         Boolean        @default(false)
+  dueAt          DateTime?
+  contactedAt    DateTime?
+  acknowledgedAt DateTime?
+  escalatedAt    DateTime?
+  notes          String         @default("")
+  student        Student        @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  isDemo         Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  @@index([studentId, status])
+  @@index([status, urgent, dueAt])
+}
+
+model NotificationEvent {
+  id           String                @id @default(cuid())
+  type         NotificationEventType
+  title        String
+  description  String
+  payload      Json                  @default("{}")
+  studentId    String?
+  departmentId String?
+  targetRole   RoleName?
+  targetUserId String?
+  actorUserId  String?
+  occurredAt   DateTime              @default(now())
+  dedupeKey    String?               @unique
+  targetUser   User?                 @relation("NotificationUserTarget", fields: [targetUserId], references: [id], onDelete: SetNull)
+  actor        User?                 @relation("NotificationActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  student      Student?              @relation(fields: [studentId], references: [id], onDelete: SetNull)
+  department   Department?           @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  emailHistory EmailHistory[]
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@index([type, occurredAt])
+  @@index([departmentId, occurredAt])
+  @@index([targetRole, occurredAt])
+}
+
+model EmailHistory {
+  id                  String             @id @default(cuid())
+  status              EmailStatus
+  kind                EmailKind
+  recipient           String
+  recipientRole       RoleName?
+  subject             String
+  body                String             @default("")
+  errorMessage        String?
+  attempt             Int                @default(0)
+  idempotencyKey      String?            @unique
+  notificationEventId String?
+  notificationEvent   NotificationEvent? @relation(fields: [notificationEventId], references: [id], onDelete: SetNull)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  sentAt              DateTime?
+
+  @@index([recipientRole, createdAt])
+  @@index([status, createdAt])
+  @@index([kind, createdAt])
+}
+
+model RiskConfiguration {
+  id                String   @id @default("default")
+  attendanceMinimum Float    @default(75)
+  moderateThreshold Float    @default(30)
+  criticalThreshold Float    @default(65)
+  attendanceWeight  Float    @default(0.15)
+  assessmentWeight  Float    @default(0.4)
+  assignmentWeight  Float    @default(0.2)
+  labWeight         Float    @default(0.05)
+  velocityWeight    Float    @default(0.2)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+}
+
+model DigestSnapshot {
+  id         String   @id @default(cuid())
+  scopeKey   String
+  capturedAt DateTime @default(now())
+  snapshot   Json
+  digestHash String
+  createdAt  DateTime @default(now())
+
+  @@unique([scopeKey, digestHash])
+  @@index([scopeKey, capturedAt])
+}

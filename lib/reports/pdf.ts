@@ -139,3 +139,115 @@ export function buildReportPdf(report: ReportDocument, generatedBy: string, role
   }
   return pdf;
 }
+
+export function buildGradebookReportPdf(
+  report: ReportDocument,
+  details: { course: string; term: string; faculty: string; generatedAt: Date },
+) {
+  const margin = 10;
+  const footerSpace = 16;
+  const pdf = new jsPDF({ orientation: "landscape", format: "a4", unit: "mm" });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const contentWidth = pageWidth - margin * 2;
+  const generatedLabel = details.generatedAt.toLocaleString();
+  const summary = report.summary ?? [];
+
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(17);
+  pdf.setTextColor(20, 75, 58);
+  pdf.text("LUMINA AI", margin, 13);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(8);
+  pdf.setTextColor(80);
+  pdf.text("Academic Intelligence System", margin, 18);
+  pdf.setFont("helvetica", "bold");
+  pdf.setFontSize(13);
+  pdf.setTextColor(25);
+  pdf.text(report.title, margin, 26);
+  pdf.setFont("helvetica", "normal");
+  pdf.setFontSize(8);
+  pdf.setTextColor(65);
+  pdf.text(`Course: ${details.course}    Term: ${details.term}    Faculty: ${details.faculty}    Generated: ${generatedLabel}`, margin, 32);
+
+  const summaryItems = [
+    ["Total Students", summary.find(([label]) => label === "Total Students")?.[1] ?? 0],
+    ["Average Percentage", summary.find(([label]) => label === "Average Percentage")?.[1] ?? "0.0%"],
+    ["Safe Students", summary.find(([label]) => label === "Safe Students")?.[1] ?? 0],
+    ["Moderate Students", summary.find(([label]) => label === "Moderate Students")?.[1] ?? 0],
+    ["Critical Students", summary.find(([label]) => label === "Critical Students")?.[1] ?? 0],
+  ];
+  const summaryGap = 4;
+  const summaryWidth = (contentWidth - summaryGap * (summaryItems.length - 1)) / summaryItems.length;
+  summaryItems.forEach(([label, value], index) => {
+    const x = margin + index * (summaryWidth + summaryGap);
+    pdf.setFillColor(241, 247, 244);
+    pdf.setDrawColor(210, 222, 216);
+    pdf.roundedRect(x, 36, summaryWidth, 13, 1.5, 1.5, "FD");
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7);
+    pdf.setTextColor(85);
+    pdf.text(String(label), x + 2, 41);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(9);
+    pdf.setTextColor(25, 65, 48);
+    pdf.text(String(value), x + 2, 46);
+  });
+
+  const widths = [49, 29, 19, 23, 18, 26, 21, 22, 23, 21, 26];
+  autoTable(pdf, {
+    startY: 53,
+    head: [report.columns],
+    body: report.rows.map((row) => report.columns.map((column, index) => {
+      const value = row[index] ?? "";
+      return typeof value === "number" && /^(percentage|normalized)$/i.test(column)
+        ? `${value.toFixed(1)}%`
+        : String(value);
+    })),
+    theme: "grid",
+    tableWidth: contentWidth,
+    margin: { top: 20, right: margin, bottom: footerSpace, left: margin },
+    columnStyles: Object.fromEntries(widths.map((width, index) => [index, { cellWidth: width }])),
+    styles: {
+      font: "helvetica",
+      fontSize: 7,
+      cellPadding: 1.5,
+      overflow: "linebreak",
+      valign: "middle",
+      textColor: [35, 45, 40],
+      lineColor: [205, 215, 210],
+      lineWidth: 0.15,
+      minCellHeight: 6,
+    },
+    headStyles: { fillColor: [19, 89, 66], textColor: 255, fontStyle: "bold", valign: "middle", minCellHeight: 10 },
+    alternateRowStyles: { fillColor: [242, 247, 245] },
+    rowPageBreak: "avoid",
+    showHead: "everyPage",
+    didDrawPage: (data) => {
+      if (data.pageNumber === 1) return;
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8);
+      pdf.setTextColor(20, 75, 58);
+      pdf.text("LUMINA AI", margin, 10);
+      pdf.setFont("helvetica", "normal");
+      pdf.setTextColor(75);
+      pdf.text("Gradebook Report", margin + 24, 10);
+      pdf.setDrawColor(190);
+      pdf.line(margin, 14, pageWidth - margin, 14);
+    },
+  });
+
+  const pageCount = pdf.getNumberOfPages();
+  for (let page = 1; page <= pageCount; page += 1) {
+    pdf.setPage(page);
+    pdf.setDrawColor(170);
+    pdf.line(margin, pageHeight - 12, pageWidth - margin, pageHeight - 12);
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(7);
+    pdf.setTextColor(85);
+    pdf.text("Lumina AI · Academic Intelligence System", margin, pageHeight - 7);
+    pdf.text(`Generated ${generatedLabel}`, pageWidth / 2, pageHeight - 7, { align: "center" });
+    pdf.text(`Page ${page} of ${pageCount}`, pageWidth - margin, pageHeight - 7, { align: "right" });
+  }
+  return pdf;
+}

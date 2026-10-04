@@ -31,6 +31,10 @@ export interface DemoSettings {
   institutionName: string;
   notifyCriticalRisk: boolean;
   notifyAttendanceRisk: boolean;
+  emailDigestEnabled: boolean;
+  emailDigestSendOnlyOnChange: boolean;
+  emailDigestCompactSummary: boolean;
+  immediateCriticalAlertsEnabled: boolean;
   demoMode: boolean;
 }
 
@@ -77,6 +81,7 @@ export interface DemoState {
     futureAbsences: number;
   };
   attendanceByStudent: Record<number, DemoAttendanceStatus>;
+  attendanceByCourse: Record<string, Record<number, DemoAttendanceStatus>>;
   gradebook: Record<number, DemoGradeRecord>;
   completedRecoveryTaskIds: number[];
   recoveryTasks: RecoveryTask[];
@@ -112,6 +117,10 @@ export const DEMO_SETTINGS: DemoSettings = {
   institutionName: DEFAULT_LUMINA_CONFIG.institutionName,
   notifyCriticalRisk: true,
   notifyAttendanceRisk: true,
+  emailDigestEnabled: DEFAULT_LUMINA_CONFIG.email.enabled,
+  emailDigestSendOnlyOnChange: DEFAULT_LUMINA_CONFIG.email.sendOnlyOnChange,
+  emailDigestCompactSummary: DEFAULT_LUMINA_CONFIG.email.compactSummaryWhenIdle,
+  immediateCriticalAlertsEnabled: DEFAULT_LUMINA_CONFIG.email.immediateAlertsEnabled,
   demoMode: DEFAULT_LUMINA_CONFIG.demoMode,
 };
 
@@ -171,6 +180,7 @@ export const INITIAL_DEMO_STATE: DemoState = {
     futureAbsences: 0,
   },
   attendanceByStudent: initialAttendanceByStudent,
+  attendanceByCourse: {},
   gradebook: initialGradebook,
   completedRecoveryTaskIds: [],
   recoveryTasks,
@@ -214,14 +224,30 @@ export function normalizeDemoState(value: unknown): DemoState {
     institutionName: typeof settingsValue.institutionName === "string" ? settingsValue.institutionName : DEMO_SETTINGS.institutionName,
     notifyCriticalRisk: typeof settingsValue.notifyCriticalRisk === "boolean" ? settingsValue.notifyCriticalRisk : DEMO_SETTINGS.notifyCriticalRisk,
     notifyAttendanceRisk: typeof settingsValue.notifyAttendanceRisk === "boolean" ? settingsValue.notifyAttendanceRisk : DEMO_SETTINGS.notifyAttendanceRisk,
+    emailDigestEnabled: typeof settingsValue.emailDigestEnabled === "boolean" ? settingsValue.emailDigestEnabled : DEMO_SETTINGS.emailDigestEnabled,
+    emailDigestSendOnlyOnChange: typeof settingsValue.emailDigestSendOnlyOnChange === "boolean" ? settingsValue.emailDigestSendOnlyOnChange : DEMO_SETTINGS.emailDigestSendOnlyOnChange,
+    emailDigestCompactSummary: typeof settingsValue.emailDigestCompactSummary === "boolean" ? settingsValue.emailDigestCompactSummary : DEMO_SETTINGS.emailDigestCompactSummary,
+    immediateCriticalAlertsEnabled: typeof settingsValue.immediateCriticalAlertsEnabled === "boolean" ? settingsValue.immediateCriticalAlertsEnabled : DEMO_SETTINGS.immediateCriticalAlertsEnabled,
     demoMode: typeof settingsValue.demoMode === "boolean" ? settingsValue.demoMode : DEMO_SETTINGS.demoMode,
   });
   const validStatuses: readonly DemoAttendanceStatus[] = ["Present", "Absent", "On Duty", "Medical Leave"];
   const attendanceByStudent: DemoState["attendanceByStudent"] = { ...INITIAL_DEMO_STATE.attendanceByStudent };
+  const attendanceByCourse: DemoState["attendanceByCourse"] = {};
   if (isRecord(value.attendanceByStudent)) {
     for (const [id, status] of Object.entries(value.attendanceByStudent)) {
       if (/^\d+$/.test(id) && typeof status === "string" && validStatuses.includes(status as DemoAttendanceStatus)) {
         attendanceByStudent[Number(id)] = status as DemoAttendanceStatus;
+      }
+    }
+  }
+  if (isRecord(value.attendanceByCourse)) {
+    for (const [course, courseAttendance] of Object.entries(value.attendanceByCourse)) {
+      if (!isRecord(courseAttendance)) continue;
+      attendanceByCourse[course] = {};
+      for (const [id, status] of Object.entries(courseAttendance)) {
+        if (/^\d+$/.test(id) && typeof status === "string" && validStatuses.includes(status as DemoAttendanceStatus)) {
+          attendanceByCourse[course][Number(id)] = status as DemoAttendanceStatus;
+        }
       }
     }
   }
@@ -317,6 +343,7 @@ export function normalizeDemoState(value: unknown): DemoState {
       futureAbsences: finiteValue(attendanceValue.futureAbsences, INITIAL_DEMO_STATE.attendanceSimulator.futureAbsences),
     },
     attendanceByStudent,
+    attendanceByCourse,
     gradebook,
     completedRecoveryTaskIds: numericIds(value.completedRecoveryTaskIds, []),
     recoveryTasks: recoveryTasksValue.length > 0 ? recoveryTasksValue : INITIAL_DEMO_STATE.recoveryTasks,

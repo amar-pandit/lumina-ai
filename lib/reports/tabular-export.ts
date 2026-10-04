@@ -88,10 +88,12 @@ function sheetFromRows(columns: string[], rows: Array<Array<string | number>>) {
           bottom: { style: "thin", color: { rgb: "D9E2DD" } },
           right: { style: "thin", color: { rgb: "E3EAE6" } },
         },
-        ...(/attendance|performance|progress|percentage/.test(header) && typeof cell.v === "number"
+        ...(/attendance|performance|progress|percentage|normalized/.test(header) && typeof cell.v === "number"
           ? { numFmt: '0.0"%"' }
           : {}),
-        ...(isRiskScore && isScoreNumber ? { numFmt: "0.0" } : {}),
+        ...((/cia|midterm|lab|assignment|total/.test(header) || isRiskScore) && typeof cell.v === "number"
+          ? { numFmt: "0.0" }
+          : {}),
       };
     }
   }
