@@ -184,7 +184,7 @@ export function FaceIdPanel({
               ) {
                 callbacksRef.current.onAuthenticated(payload.session);
               } else {
-                fail("Face verification did not return a valid Lumina session.");
+                fail("Face verification did not return a valid CampusX session.");
               }
               return;
             }
@@ -243,7 +243,7 @@ export function FaceIdPanel({
           {error || status}
         </p>
         <p className="mt-2 text-xs leading-5 text-zinc-500">
-          Lumina processes your live camera frames in this browser and sends only face-recognition descriptors over HTTPS. No image or recording is uploaded.
+          CampusX processes your live camera frames in this browser and sends only face-recognition descriptors over HTTPS. No image or recording is uploaded.
         </p>
         {error ? (
           <div className="mt-4 grid grid-cols-2 gap-2">

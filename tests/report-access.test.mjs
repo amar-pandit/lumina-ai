@@ -177,7 +177,7 @@ test("Gradebook PDF and exports use every calculated row, landscape layout, and 
   const pageContents = pdf.internal.pages.slice(1).map((page) => page.join(""));
   pageContents.forEach((content, index) => {
     assert.ok(content.includes(`Page ${index + 1} of ${pageContents.length}`));
-    assert.ok(content.includes("Lumina AI"));
+    assert.ok(content.includes("CampusX"));
     assert.ok(content.includes("Student"));
   });
   const fullPdfText = pageContents.join("");

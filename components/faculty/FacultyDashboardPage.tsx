@@ -46,7 +46,7 @@ export function FacultyDashboardPage({ workspace = "Faculty" }: { workspace?: "F
               <Sparkles className="h-4 w-4" />
             </div>
             <div>
-              <p className="text-[10px] font-semibold uppercase text-emerald-200/80">Lumina AI <span className="px-1.5 text-zinc-600">/</span> {workspace} workspace</p>
+              <p className="text-[10px] font-semibold uppercase text-emerald-200/80">CampusX <span className="px-1.5 text-zinc-600">/</span> {workspace} workspace</p>
               <h1 className="mt-1 text-xl font-semibold text-white sm:text-2xl">{workspace === "Mentor" ? "Mentor cockpit" : "Academic cockpit"}</h1>
             </div>
           </Link>

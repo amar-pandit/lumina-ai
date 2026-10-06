@@ -236,7 +236,7 @@ export function getAdminInstitutionData(
 export function buildMentorAttendanceEmail(data: MentorAttendanceData): { subject: string; body: string } {
   const list = (students: string[]) => students.length ? students.map((student) => `- ${student}`).join("\n") : "None";
   return {
-    subject: "[Lumina AI] Mentor Attendance Update",
+    subject: "[CampusX] Mentor Attendance Update",
     body: [
       "Mentor Attendance Update",
       `Date/time: ${data.dateTime}`,
@@ -266,7 +266,7 @@ export function buildMentorAttendanceEmail(data: MentorAttendanceData): { subjec
 
 export function buildFacultyCourseEmail(data: FacultyCourseData): { subject: string; body: string } {
   return {
-    subject: `[Lumina AI] Faculty Course Update — ${data.course}`,
+    subject: `[CampusX] Faculty Course Update — ${data.course}`,
     body: [
       `Course: ${data.course}`,
       `Class/Section: ${data.className}`,
@@ -282,7 +282,7 @@ export function buildFacultyCourseEmail(data: FacultyCourseData): { subject: str
 function buildLeadershipBody(data: LeadershipAttendanceData, audience: "HOD" | "ADMIN"): { subject: string; body: string } {
   const title = audience === "HOD" ? `HOD Department Update — ${data.department}` : "Admin Institution Update";
   return {
-    subject: `[Lumina AI] ${title}`,
+    subject: `[CampusX] ${title}`,
     body: [
       title,
       `Date/time: ${data.dateTime}`,

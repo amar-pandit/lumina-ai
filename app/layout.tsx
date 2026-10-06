@@ -12,7 +12,7 @@ const jetBrainsMono = JetBrains_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Lumina AI | Predict. Explain. Recover.",
+  title: "CampusX | Predict. Explain. Recover.",
   description: "AI-powered academic early warning system for students and faculty.",
 };
 

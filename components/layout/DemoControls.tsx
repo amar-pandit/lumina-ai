@@ -250,7 +250,7 @@ export function DemoControls() {
 
   return (
     <div className="flex flex-wrap items-center gap-2 sm:gap-2.5">
-      <span title="Data, notifications, and integrations are simulated; no real messages are sent." aria-label="Lumina AI demo mode. Data, notifications, and integrations are simulated; no real messages are sent." className="inline-flex rounded-full border border-emerald-200/15 bg-emerald-200/[0.06] px-2 py-1 text-[8px] font-semibold uppercase text-emerald-100 sm:px-2.5 sm:text-[9px]">LUMINA AI • DEMO MODE</span>
+      <span title="Data, notifications, and integrations are simulated; no real messages are sent." aria-label="CampusX demo mode. Data, notifications, and integrations are simulated; no real messages are sent." className="inline-flex rounded-full border border-emerald-200/15 bg-emerald-200/[0.06] px-2 py-1 text-[8px] font-semibold uppercase text-emerald-100 sm:px-2.5 sm:text-[9px]">CampusX • DEMO MODE</span>
       <label className="sr-only" htmlFor="academic-term">Academic term</label>
       <select
         id="academic-term"
@@ -353,7 +353,7 @@ export function DemoControls() {
 
       {searchOpen ? (
         <div className="fixed inset-0 z-[80] flex items-start justify-center bg-black/70 px-4 pt-[12vh] backdrop-blur-sm" onMouseDown={(event) => { if (event.target === event.currentTarget) setSearchOpen(false); }}>
-          <section role="dialog" aria-modal="true" aria-label="Search Lumina AI" className="w-full max-w-xl overflow-hidden rounded-2xl border border-white/10 bg-[#111a1b] shadow-2xl shadow-black/60">
+          <section role="dialog" aria-modal="true" aria-label="Search CampusX" className="w-full max-w-xl overflow-hidden rounded-2xl border border-white/10 bg-[#111a1b] shadow-2xl shadow-black/60">
             <div className="flex items-center gap-3 border-b border-white/10 px-4">
               <Command className="h-4 w-4 text-emerald-200" />
               <input autoFocus value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Search students, courses, interventions..." className="h-14 min-w-0 flex-1 bg-transparent text-sm text-white outline-none placeholder:text-zinc-500" />

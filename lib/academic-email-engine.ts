@@ -317,7 +317,7 @@ export function buildRoleDigestEmail(
   const generatedAt = options.generatedAt ? new Date(options.generatedAt) : new Date();
   const snapshot = buildAcademicDigestSnapshot({ ...digest, scopeName: scopeLabel, actionItems: options.actionItems ?? digest.actionItems ?? [] });
   const recipients = options.recipients ?? [];
-  const subject = `[Lumina AI] ${roleLabel(normalizedRole)} Academic Update — ${scopeLabel}`;
+  const subject = `[CampusX] ${roleLabel(normalizedRole)} Academic Update — ${scopeLabel}`;
   const lines = [`Academic ${roleLabel(normalizedRole).toLowerCase()} update for ${scopeLabel}.`, `Generated at: ${generatedAt.toISOString()}`, ""];
 
   if (normalizedRole === "MENTOR") {
@@ -437,7 +437,7 @@ export function buildImmediateAlertEmail(
   const issueText = event.issue ?? "Critical academic risk";
 
   const lines = [
-    "[Lumina AI] Critical Academic Alert — Action Required",
+    "[CampusX] Critical Academic Alert — Action Required",
     "",
     "A critical academic event has been detected.",
     "",
@@ -456,7 +456,7 @@ export function buildImmediateAlertEmail(
   ];
 
   return {
-    subject: `[Lumina AI] Critical Academic Alert — Action Required`,
+    subject: `[CampusX] Critical Academic Alert — Action Required`,
     body: lines.join("\n"),
   };
 }

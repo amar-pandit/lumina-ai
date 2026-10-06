@@ -131,7 +131,7 @@ export function buildReportPdf(report: ReportDocument, generatedBy: string, role
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(6.5);
     pdf.setTextColor(85);
-    pdf.text("Lumina AI · Academic Intelligence System", PAGE_MARGIN, pageHeight - 11);
+    pdf.text("CampusX · Academic Intelligence System", PAGE_MARGIN, pageHeight - 11);
     pdf.text(`Generated ${generatedLabel}`, pageWidth / 2, pageHeight - 11, { align: "center" });
     pdf.text(`Page ${page} of ${pageCount}`, pageWidth - PAGE_MARGIN, pageHeight - 11, { align: "right" });
     pdf.setFontSize(6);
@@ -245,7 +245,7 @@ export function buildGradebookReportPdf(
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(7);
     pdf.setTextColor(85);
-    pdf.text("Lumina AI · Academic Intelligence System", margin, pageHeight - 7);
+    pdf.text("CampusX · Academic Intelligence System", margin, pageHeight - 7);
     pdf.text(`Generated ${generatedLabel}`, pageWidth / 2, pageHeight - 7, { align: "center" });
     pdf.text(`Page ${page} of ${pageCount}`, pageWidth - margin, pageHeight - 7, { align: "right" });
   }

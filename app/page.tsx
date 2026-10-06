@@ -32,7 +32,7 @@ export default function HomePage() {
             <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-emerald-200/20 bg-emerald-300/10 text-sm font-bold text-emerald-100">
               L
             </div>
-            <span className="text-lg font-semibold text-white">Lumina AI</span>
+            <span className="text-lg font-semibold text-white">CampusX</span>
           </div>
           <nav className="hidden items-center gap-2 text-xs text-zinc-300 sm:flex sm:gap-5 sm:text-sm">
             <Link href="/student/dashboard" className="rounded-lg px-2 py-2 transition hover:text-emerald-100">Student workspace</Link>
@@ -47,7 +47,7 @@ export default function HomePage() {
               AI Academic Early Warning System
             </div>
             <h1 className="max-w-xl text-5xl font-semibold text-white sm:text-6xl">
-              Lumina AI
+              CampusX
             </h1>
             <h2 className="mt-3 text-2xl font-medium text-emerald-200 sm:text-3xl">
               Predict. Explain. Recover.

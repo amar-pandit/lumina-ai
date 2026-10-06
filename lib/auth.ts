@@ -163,7 +163,7 @@ export async function login(identifier: string, password: string): Promise<DemoS
 
 export async function loginWithFaceIdentity(userId: DemoUserId): Promise<DemoSession> {
   const account = findAccountById(userId);
-  if (!account) throw new Error("Verified face identity does not map to an available Lumina account.");
+  if (!account) throw new Error("Verified face identity does not map to an available CampusX account.");
   return setAuthenticatedSession(account);
 }
 

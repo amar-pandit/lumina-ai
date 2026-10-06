@@ -27,7 +27,7 @@ export async function POST(request: Request) {
       return Response.json({ error: "Face ID is already registered for this account." }, { status: 409 });
     }
     if (cause instanceof Error && cause.message === "FACE_ALREADY_ASSIGNED") {
-      return Response.json({ error: "This face is already registered to a different Lumina account." }, { status: 409 });
+      return Response.json({ error: "This face is already registered to a different CampusX account." }, { status: 409 });
     }
     console.error("Unable to store the encrypted Face ID identity.", cause);
     return Response.json({ error: "Face ID registration could not be saved. Please try again." }, { status: 500 });

@@ -99,7 +99,7 @@ export function Sidebar() {
             <Sparkles className="h-4 w-4" />
           </div>
           <div>
-            <p className="text-base font-semibold text-white">Lumina AI</p>
+            <p className="text-base font-semibold text-white">CampusX</p>
             <p className="mt-0.5 text-[10px] font-medium uppercase text-zinc-500">{workspaceName}</p>
           </div>
         </Link>

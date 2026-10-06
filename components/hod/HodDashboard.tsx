@@ -126,7 +126,7 @@ export function HodDashboard() {
     <div>
       <header className="sticky top-0 z-30 flex flex-col gap-4 border-b border-white/10 bg-[#0a1112]/90 px-4 py-4 backdrop-blur-xl sm:px-6 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <p className="text-[10px] font-semibold uppercase text-emerald-200/80">Lumina AI / HOD workspace</p>
+          <p className="text-[10px] font-semibold uppercase text-emerald-200/80">CampusX / HOD workspace</p>
           <h1 className="mt-1.5 text-2xl font-semibold text-white sm:text-[28px]">Department overview</h1>
           <p className="mt-1 text-sm text-zinc-400">Department-level attendance, academic performance, risk, and support activity.</p>
         </div>

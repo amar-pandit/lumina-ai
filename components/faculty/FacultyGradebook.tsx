@@ -145,13 +145,13 @@ export function FacultyGradebook() {
           generatedAt,
         });
         blob = pdf.output("blob");
-        filename = "Lumina_Gradebook_Report.pdf";
+        filename = "CampusX_Gradebook_Report.pdf";
       } else if (format === "csv") {
         blob = new Blob([buildReportCsv(gradebookReport)], { type: "text/csv;charset=utf-8" });
-        filename = "Lumina_Gradebook_Report.csv";
+        filename = "CampusX_Gradebook_Report.csv";
       } else {
         blob = await createGradebookWorkbookBlob(gradebookReport, session.user.name, generatedAt);
-        filename = "Lumina_Gradebook_Report.xlsx";
+        filename = "CampusX_Gradebook_Report.xlsx";
       }
 
       const url = URL.createObjectURL(blob);

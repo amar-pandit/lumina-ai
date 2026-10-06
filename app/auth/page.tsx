@@ -154,23 +154,23 @@ export default function AuthPage() {
           <div>
             <Link href="/" className="inline-flex items-center gap-3">
               <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-emerald-200/20 bg-emerald-300/10 text-emerald-200"><Sparkles className="h-5 w-5" /></span>
-              <span className="text-lg font-semibold text-white">Lumina AI</span>
+              <span className="text-lg font-semibold text-white">CampusX</span>
             </Link>
             <p className="mt-16 text-xs font-semibold uppercase tracking-[0.24em] text-emerald-200/80">Academic early warning system</p>
             <h1 className="mt-4 text-4xl font-semibold leading-tight text-white">Predict.<br />Explain.<br /><span className="text-emerald-200">Recover.</span></h1>
-            <p className="mt-5 max-w-sm text-sm leading-7 text-zinc-400">Sign in to explore the Lumina AI demo workspace for students, faculty, mentors, and academic leadership.</p>
+            <p className="mt-5 max-w-sm text-sm leading-7 text-zinc-400">Sign in to explore the CampusX demo workspace for students, faculty, mentors, and academic leadership.</p>
           </div>
           <p className="text-xs text-zinc-600">Frontend-only hackathon demonstration</p>
         </section>
 
         <section className="p-6 sm:p-10">
           <div className="mb-8 flex items-center justify-between gap-3">
-            <Link href="/" className="flex items-center gap-2 text-sm font-semibold text-white lg:hidden"><Sparkles className="h-4 w-4 text-emerald-200" />Lumina AI</Link>
-            <span className="inline-flex rounded-full border border-emerald-200/15 bg-emerald-200/[0.06] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-100">LUMINA AI • DEMO MODE</span>
+            <Link href="/" className="flex items-center gap-2 text-sm font-semibold text-white lg:hidden"><Sparkles className="h-4 w-4 text-emerald-200" />CampusX</Link>
+            <span className="inline-flex rounded-full border border-emerald-200/15 bg-emerald-200/[0.06] px-2.5 py-1 text-[9px] font-semibold uppercase tracking-wide text-emerald-100">CampusX • DEMO MODE</span>
           </div>
           <div className="mb-7">
             <p className="text-sm text-zinc-400">Welcome back</p>
-            <h2 className="mt-1 text-3xl font-semibold text-white">Sign in to Lumina</h2>
+            <h2 className="mt-1 text-3xl font-semibold text-white">Sign in to CampusX</h2>
             <p className="mt-2 text-sm text-zinc-500">
               {setupUser
                 ? "Set up Face ID for faster login next time."
@@ -181,7 +181,7 @@ export default function AuthPage() {
           {setupUser ? (
             <div className="space-y-3 rounded-xl border border-emerald-200/20 bg-emerald-200/[0.05] p-4">
               <p role="status" className="text-sm text-emerald-100">Set up Face ID for faster login next time.</p>
-              <p className="text-xs leading-5 text-zinc-400">Your live camera frames are processed in this browser. Lumina stores only encrypted face-recognition descriptors, never photos or recordings.</p>
+              <p className="text-xs leading-5 text-zinc-400">Your live camera frames are processed in this browser. CampusX stores only encrypted face-recognition descriptors, never photos or recordings.</p>
               <button
                 type="button"
                 onClick={() => openFacePanel("register")}

@@ -252,7 +252,7 @@ export async function sendHourlyDigest(
       kind: "DIGEST",
       role,
       recipient: "",
-      subject: `[Lumina AI] ${role} Academic Update`,
+      subject: `[CampusX] ${role} Academic Update`,
       timestamp: skippedAt,
       errorMessage: "No recipient is configured for this role.",
     });
@@ -267,7 +267,7 @@ export async function sendHourlyDigest(
       kind: "DIGEST",
       role,
       recipient,
-      subject: `[Lumina AI] ${role} Academic Update — ${snapshot.scopeName ?? "Academic Workspace"}`,
+      subject: `[CampusX] ${role} Academic Update — ${snapshot.scopeName ?? "Academic Workspace"}`,
       timestamp: skippedAt,
       errorMessage: summary,
     });
@@ -304,7 +304,7 @@ export async function sendCriticalAlert(
       kind: "ALERT",
       role,
       recipient: "",
-      subject: "[Lumina AI] Critical Academic Alert — Action Required",
+      subject: "[CampusX] Critical Academic Alert — Action Required",
       timestamp: skippedAt,
       errorMessage: "No recipient is configured for this role.",
     });
@@ -335,7 +335,7 @@ export async function sendDevelopmentTestEmail(): Promise<EmailSendResult> {
       kind: "TEST",
       role: "ADMIN",
       recipient: "",
-      subject: "[Lumina AI] Test Email",
+      subject: "[CampusX] Test Email",
       timestamp,
       attempt: 0,
       errorMessage: error,
@@ -345,8 +345,8 @@ export async function sendDevelopmentTestEmail(): Promise<EmailSendResult> {
 
   return sendEmail({
     to: recipient,
-    subject: "[Lumina AI] Test Email",
-    text: "Lumina AI email notification system is working successfully.",
+    subject: "[CampusX] Test Email",
+    text: "CampusX email notification system is working successfully.",
     role: "ADMIN",
     kind: "TEST",
   });

@@ -73,7 +73,7 @@ export function ReportExportButton({ report }: { report: ReportDocument }) {
     try {
       await authorize();
       const pdf = usePreview ? pdfRef.current ?? createPreview() : createPreview();
-      if (pdf) pdf.save(`Lumina_${safeFilePart(report.title)}_${new Date().toISOString().slice(0, 10)}.pdf`);
+      if (pdf) pdf.save(`CampusX_${safeFilePart(report.title)}_${new Date().toISOString().slice(0, 10)}.pdf`);
     } catch (cause) {
       console.error("PDF download failed.", cause);
       setError(cause instanceof Error ? cause.message : "Unable to download this PDF.");
@@ -102,7 +102,7 @@ export function ReportExportButton({ report }: { report: ReportDocument }) {
       }[report.type.split("-")[0]] ?? "Report";
       const extension = format === "excel" ? "xlsx" : "csv";
       anchor.href = url;
-      anchor.download = `Lumina_${role}_Report_${generatedAt.toISOString().slice(0, 10)}.${extension}`;
+      anchor.download = `CampusX_${role}_Report_${generatedAt.toISOString().slice(0, 10)}.${extension}`;
       document.body.append(anchor);
       anchor.click();
       anchor.remove();
