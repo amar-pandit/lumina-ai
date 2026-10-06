@@ -1,7 +1,9 @@
 import "server-only";
 
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { closeSync, mkdirSync, openSync, readFileSync, writeFileSync } from "node:fs";
 import { cookies } from "next/headers";
+import { dirname, resolve } from "node:path";
 import { DEMO_ACCOUNTS, type DemoAccount } from "@/lib/demo-auth";
 import { matchPasswordCredential } from "@/lib/auth/credential-match";
 import {
@@ -17,9 +19,7 @@ export type { AuthRole, DemoSession, DemoUser } from "@/lib/auth-types";
 
 const SESSION_COOKIE = "lumina_session";
 const SESSION_MAX_AGE_SECONDS = 60 * 60 * 8;
-const authGlobal = globalThis as typeof globalThis & { __luminaAuthSecret?: Buffer };
-if (!authGlobal.__luminaAuthSecret) authGlobal.__luminaAuthSecret = randomBytes(32);
-const developmentSecret = authGlobal.__luminaAuthSecret;
+const developmentSecretPath = resolve(process.cwd(), ".data", "auth-session.key");
 
 interface SessionClaims {
   userId?: string;
@@ -40,7 +40,24 @@ function getSessionSecret(): Buffer {
   if (process.env.NODE_ENV === "production") {
     throw new Error("LUMINA_AUTH_SECRET must be configured in production.");
   }
-  return developmentSecret;
+
+  mkdirSync(dirname(developmentSecretPath), { recursive: true, mode: 0o700 });
+  try {
+    const descriptor = openSync(developmentSecretPath, "wx", 0o600);
+    try {
+      writeFileSync(descriptor, randomBytes(32));
+    } finally {
+      closeSync(descriptor);
+    }
+  } catch (cause) {
+    if (!(cause instanceof Error) || !("code" in cause) || cause.code !== "EEXIST") throw cause;
+  }
+
+  const secret = readFileSync(developmentSecretPath);
+  if (secret.byteLength !== 32) {
+    throw new Error("The development auth-session key is invalid.");
+  }
+  return secret;
 }
 
 function sign(value: string): Buffer {

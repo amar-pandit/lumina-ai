@@ -22,7 +22,7 @@ This project uses [`next/font`](https://nextjs.org/docs/app/building-your-applic
 
 ## Demo authentication
 
-Demo credentials are verified by the server. Authenticated sessions use a signed, HttpOnly cookie; browser localStorage is not used to grant a role. Configure `LUMINA_AUTH_SECRET` with at least 32 random bytes in production. Development uses a temporary process-local key, so restarting the development server invalidates existing sessions.
+Demo credentials are verified by the server. Authenticated sessions use a signed, HttpOnly cookie; browser localStorage is not used to grant a role. Configure `LUMINA_AUTH_SECRET` with at least 32 random bytes in production. Development automatically creates a private session key at `.data/auth-session.key`, so sessions remain valid across development-server restarts. Keep `.data` private and do not commit it.
 
 ## Demo authentication
 

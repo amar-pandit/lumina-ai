@@ -1,4 +1,7 @@
 import { login } from "@/lib/auth";
+import type { DemoSession } from "@/lib/auth-types";
+
+export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   let body: unknown;
@@ -19,7 +22,27 @@ export async function POST(request: Request) {
     return Response.json({ error: "Email and password are required." }, { status: 400 });
   }
 
-  const session = await login(body.email, body.password);
+  let session: DemoSession | null;
+  try {
+    session = await login(body.email, body.password);
+  } catch (cause) {
+    console.error("Unable to create a Lumina sign-in session.", cause);
+    if (
+      cause instanceof Error &&
+      (cause.message === "LUMINA_AUTH_SECRET must be configured in production." ||
+        cause.message === "LUMINA_AUTH_SECRET must be at least 32 bytes.")
+    ) {
+      return Response.json(
+        { error: "Sign-in is unavailable. Configure LUMINA_AUTH_SECRET on the server." },
+        { status: 503, headers: { "Cache-Control": "private, no-store" } },
+      );
+    }
+    return Response.json(
+      { error: "Sign-in is temporarily unavailable. Please try again later." },
+      { status: 500, headers: { "Cache-Control": "private, no-store" } },
+    );
+  }
+
   if (!session) {
     return Response.json({ error: "Invalid email or password." }, { status: 401 });
   }

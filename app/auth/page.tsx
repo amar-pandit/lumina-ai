@@ -47,12 +47,25 @@ export default function AuthPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: identifierValue, password }),
       });
-      const payload: unknown = await response.json();
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        setError(`Sign-in service returned an invalid response (HTTP ${response.status}). Please try again.`);
+        return;
+      }
 
       if (!response.ok) {
+        const serverError =
+          typeof payload === "object" &&
+          payload !== null &&
+          "error" in payload &&
+          typeof payload.error === "string"
+            ? payload.error
+            : null;
         setError(response.status === 401
           ? "Invalid email or password. Check the demo accounts and try again."
-          : "Unable to sign in. Please try again.");
+          : serverError ?? `Unable to sign in (HTTP ${response.status}). Please try again.`);
         return;
       }
       if (
@@ -94,7 +107,7 @@ export default function AuthPage() {
       router.replace(dashboardForRole(session.role));
     } catch (cause) {
       console.error("Lumina demo sign-in failed.", cause);
-      setError("Unable to sign in. Check your connection and try again.");
+      setError("Could not reach the sign-in service. Check your connection and try again.");
     } finally {
       setLoading(false);
     }
